@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Naše kempy</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kempy">
+<meta name="theme-color" content="#12201A">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏕️</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%2312201A%22/><text x=%2250%22 y=%2268%22 font-size=%2260%22 text-anchor=%22middle%22>🏕️</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650;9..144,800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #101c17;
+    --bg-elevated: #17281f;
+    --bg-card: #1c2f25;
+    --ember: #e8a33d;
+    --ember-soft: #f0c069;
+    --ember-deep: #b6512f;
+    --moss: #7fa583;
+    --moss-dim: #4c6650;
+    --cream: #f3efe3;
+    --cream-dim: #b9baaf;
+    --line: rgba(243,239,227,0.10);
+    --font-display: 'Fraunces', serif;
+    --font-body: 'DM Sans', sans-serif;
+    --radius: 14px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);}
+  body{
+    font-family: var(--font-body);
+    color: var(--cream);
+    overflow:hidden;
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(232,163,61,0.10), transparent 45%),
+      radial-gradient(ellipse at 100% 0%, rgba(127,165,131,0.08), transparent 40%),
+      var(--bg);
+  }
+  #app{ height:100dvh; display:flex; flex-direction:column; }
+
+  /* ---------- Setup banner ---------- */
+  .setup-banner{
+    display:none; position:fixed; top:0; left:0; right:0; z-index:100;
+    background: var(--ember-deep); color:#fff; font-size:12px; line-height:1.4;
+    padding:9px 16px; text-align:center;
+  }
+  .setup-banner.show{ display:block; }
+  .setup-banner code{ background:rgba(0,0,0,0.25); padding:1px 5px; border-radius:4px; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:relative;
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--line);
+    overflow:hidden;
+    flex-shrink:0;
+  }
+  header::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='120'%3E%3Cg fill='none' stroke='%237fa583' stroke-opacity='0.18' stroke-width='1'%3E%3Cpath d='M-10 100 Q 60 40 150 90 T 320 60'/%3E%3Cpath d='M-10 115 Q 70 60 160 105 T 320 80'/%3E%3Cpath d='M-10 85 Q 50 20 140 70 T 320 35'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: cover;
+    background-position: bottom;
+    pointer-events:none;
+  }
+  header h1{
+    position:relative;
+    font-family: var(--font-display);
+    font-weight: 650;
+    font-size: 28px;
+    margin: 0 0 2px;
+    letter-spacing: 0.2px;
+  }
+  header h1 .flame{ color: var(--ember); }
+  header p{
+    position:relative;
+    margin:0; font-size: 13px; color: var(--cream-dim);
+    display:flex; align-items:center; gap:7px;
+  }
+  .sync-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .sync-dot.connecting{ background: var(--ember); animation: pulse 1.4s ease-in-out infinite; }
+  .sync-dot.ok{ background: var(--moss); }
+  .sync-dot.error{ background: var(--ember-deep); }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+
+  /* ---------- Views ---------- */
+  main{ flex:1; min-height:0; position:relative; }
+  .view{ position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:none; padding-bottom: calc(90px + var(--safe-bottom)); }
+  .view.active{ display:block; }
+
+  #map{ position:absolute; inset:0; }
+  .view-map{ padding-bottom:0 !important; }
+  .map-attrib{
+    position:absolute; left:10px; bottom:14px; z-index:500;
+    background: rgba(16,28,23,0.78); color: var(--cream-dim); font-size:11px;
+    padding:5px 9px; border-radius:8px; backdrop-filter: blur(2px);
+  }
+  .map-attrib a{ color: var(--ember-soft); font-weight:700; text-decoration:none; }
+  .map-attrib.warn{ color: #ffd9c7; }
+
+  .list-toolbar{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 10px; padding: 16px 18px 4px;
+  }
+  .list-toolbar h2{ font-family: var(--font-display); font-size:20px; margin:0; font-weight:650;}
+  select.sortsel{
+    background: var(--bg-elevated); color: var(--cream); border:1px solid var(--line);
+    border-radius: 10px; padding: 7px 10px; font-family: var(--font-body); font-size:12.5px;
+  }
+
+  .empty-state{
+    margin: 40px 24px; text-align:center; color: var(--cream-dim);
+  }
+  .empty-state .icon{ font-size: 36px; display:block; margin-bottom:10px; }
+  .empty-state b{ color: var(--cream); }
+
+  .card-list{ padding: 10px 14px 4px; display:flex; flex-direction:column; gap:10px; }
+  .camp-card{
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px;
+    display:flex; gap:12px;
+    cursor:pointer;
+  }
+  .camp-card .thumb{
+    width:64px; height:64px; border-radius:10px; flex-shrink:0;
+    background: var(--bg-elevated) center/cover no-repeat;
+    display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--moss-dim);
+  }
+  .camp-card .info{ flex:1; min-width:0; }
+  .camp-card .info .row1{ display:flex; justify-content:space-between; align-items:baseline; gap:8px;}
+  .camp-card h3{ font-family: var(--font-display); font-size:16.5px; margin:0; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .camp-card .flames{ font-size:12px; letter-spacing:1px; white-space:nowrap; flex-shrink:0;}
+  .camp-card .note{ font-size:12.5px; color: var(--cream-dim); margin-top:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .camp-card .meta{ font-size:11px; color: var(--moss); margin-top:6px; }
+  .reorder-btns{ display:flex; flex-direction:column; gap:4px; justify-content:center; }
+  .reorder-btns button{
+    background: var(--bg-elevated); border:1px solid var(--line); color:var(--cream-dim);
+    width:26px; height:22px; border-radius:6px; font-size:11px;
+  }
+
+  /* ---------- Bottom nav ---------- */
+  nav.bottom-nav{
+    flex-shrink:0;
+    display:flex;
+    border-top: 1px solid var(--line);
+    background: var(--bg-elevated);
+    padding-bottom: var(--safe-bottom);
+    z-index: 20;
+  }
+  nav.bottom-nav button{
+    flex:1; background:none; border:none; color: var(--cream-dim);
+    font-family: var(--font-body); font-size: 10.5px; padding: 9px 4px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  nav.bottom-nav button .ic{ font-size:19px; }
+  nav.bottom-nav button.active{ color: var(--ember-soft); }
+
+  /* ---------- Detail / Add sheet ---------- */
+  .sheet-backdrop{
+    position:fixed; inset:0; background: rgba(6,10,8,0.6); backdrop-filter: blur(2px);
+    z-index: 40; display:none;
+  }
+  .sheet-backdrop.active{ display:block; }
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; max-height: 88dvh;
+    background: var(--bg-elevated); border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--line);
+    z-index: 41; transform: translateY(100%); transition: transform .25s ease;
+    display:flex; flex-direction:column;
+  }
+  .sheet.active{ transform: translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background: var(--line); border-radius:4px; margin:10px auto 4px; flex-shrink:0;}
+  .sheet-body{ overflow-y:auto; padding: 6px 20px calc(24px + var(--safe-bottom)); }
+  .sheet-body h2{ font-family: var(--font-display); font-size:22px; margin: 6px 0 12px; }
+
+  label.field{ display:block; margin-bottom:14px; }
+  label.field span{ display:block; font-size:11.5px; color: var(--moss); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;}
+  input[type=text], input[type=number], textarea{
+    width:100%; background: var(--bg-card); border:1px solid var(--line); color: var(--cream);
+    border-radius:10px; padding:10px 12px; font-family: var(--font-body); font-size:14.5px;
+  }
+  textarea{ min-height:70px; resize:vertical; }
+  .coordrow{ display:flex; gap:8px; }
+  .coordrow input{ flex:1; }
+
+  .flame-picker{ display:flex; gap:6px; font-size:26px; }
+  .flame-picker span{ opacity:0.25; cursor:pointer; }
+  .flame-picker span.on{ opacity:1; }
+
+  .visited-toggle{ display:flex; gap:8px; }
+  .visited-toggle button{
+    flex:1; padding:10px; border-radius:10px; border:1px solid var(--line);
+    background: var(--bg-card); color: var(--cream-dim); font-family: var(--font-body); font-size:13px;
+  }
+  .visited-toggle button.on{ background: var(--ember); color:#221200; border-color: var(--ember); font-weight:700; }
+
+  .minimap{ height:180px; border-radius:12px; overflow:hidden; margin-bottom:4px; border:1px solid var(--line); }
+  .mini-attrib{ font-size:10px; color: var(--cream-dim); margin-bottom:8px; }
+  .mini-attrib a{ color: var(--ember-soft); text-decoration:none; font-weight:700; }
+  .searchrow{ display:flex; gap:8px; margin-bottom:8px; }
+  .searchrow input{ flex:1; }
+  .searchrow button{ background: var(--moss-dim); color: var(--cream); border:none; border-radius:10px; padding:0 14px; font-size:13px; }
+  .search-results{ font-size:12.5px; margin-bottom:8px; }
+  .search-results div{ padding:7px 8px; background: var(--bg-card); border-radius:8px; margin-bottom:5px; cursor:pointer; }
+
+  .photo-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .photo-thumb{ position:relative; width:70px; height:70px; border-radius:10px; overflow:hidden; }
+  .photo-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .photo-thumb .rm{ position:absolute; top:2px; right:2px; background: rgba(0,0,0,0.6); color:#fff; border:none; width:18px; height:18px; border-radius:50%; font-size:11px; line-height:1;}
+  .photo-add{ width:70px; height:70px; border-radius:10px; border:1.5px dashed var(--line); display:flex; align-items:center; justify-content:center; font-size:22px; color: var(--cream-dim); cursor:pointer; }
+
+  .btn-primary{
+    width:100%; padding:13px; border:none; border-radius:12px; background: var(--ember);
+    color:#221200; font-weight:700; font-size:15px; font-family: var(--font-body); margin-top:6px;
+  }
+  .btn-primary:disabled{ opacity:0.5; }
+  .btn-secondary{
+    width:100%; padding:12px; border:1px solid var(--line); border-radius:12px; background:none;
+    color: var(--cream-dim); font-size:13.5px; margin-top:10px; font-family: var(--font-body);
+  }
+  .btn-danger{ color: var(--ember-deep); }
+
+  /* Lightbox */
+  #lightbox{ position:fixed; inset:0; background:rgba(6,10,8,0.92); z-index:60; display:none; align-items:center; justify-content:center; padding:20px;}
+  #lightbox.active{ display:flex; }
+  #lightbox img{ max-width:100%; max-height:100%; border-radius:8px; }
+
+  .leaflet-popup-content-wrapper{ background: var(--bg-elevated); color: var(--cream); border-radius:12px; }
+  .leaflet-popup-tip{ background: var(--bg-elevated); }
+  .popup-title{ font-family: var(--font-display); font-weight:650; font-size:14px; margin-bottom:2px;}
+  .popup-flames{ font-size:11px; }
+  .leaflet-control-layers{ background: var(--bg-elevated) !important; color: var(--cream) !important; border:1px solid var(--line) !important; }
+  .leaflet-control-layers-toggle{ filter: invert(1); }
+
+  ::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+<div class="setup-banner" id="setup-banner"></div>
+<div id="app">
+  <header>
+    <h1><span class="flame">🔥</span> Naše kempy</h1>
+    <p>Deník navštívených kempů a seznam přání <span class="sync-dot connecting" id="sync-dot" title="Připojování…"></span></p>
+  </header>
+
+  <main>
+    <div class="view view-map" id="view-mapa">
+      <div id="map"></div>
+      <div class="map-attrib" id="map-attrib"><a href="https://mapy.com" target="_blank" rel="noopener">Mapy.com</a> · © Seznam.cz a.s. a další</div>
+    </div>
+
+    <div class="view" id="view-navstivene">
+      <div class="list-toolbar">
+        <h2>Navštívené</h2>
+        <select class="sortsel" id="sort-visited">
+          <option value="rating">Nejlépe hodnocené</option>
+          <option value="name">Abecedně</option>
+          <option value="date">Nejnovější</option>
+        </select>
+      </div>
+      <div id="list-navstivene" class="card-list"></div>
+    </div>
+
+    <div class="view" id="view-chci">
+      <div class="list-toolbar">
+        <h2>Chci navštívit</h2>
+        <select class="sortsel" id="sort-wishlist">
+          <option value="priority">Priorita</option>
+          <option value="name">Abecedně</option>
+          <option value="date">Nejnovější přidané</option>
+        </select>
+      </div>
+      <div id="list-chci" class="card-list"></div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button data-view="mapa" class="active"><span class="ic">🗺️</span>Mapa</button>
+    <button data-view="navstivene"><span class="ic">🏕️</span>Navštívené</button>
+    <button data-view="chci"><span class="ic">⭐</span>Chci navštívit</button>
+    <button id="btn-add"><span class="ic">➕</span>Přidat</button>
+    <button id="btn-more"><span class="ic">⋯</span>Více</button>
+  </nav>
+</div>
+
+<div class="sheet-backdrop" id="backdrop"></div>
+
+<!-- Add / edit sheet -->
+<div class="sheet" id="sheet-form">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h2 id="form-title">Přidat kemp</h2>
+    <input type="hidden" id="edit-id">
+
+    <label class="field"><span>Název</span>
+      <input type="text" id="f-name" placeholder="např. Kemp Bítov">
+    </label>
+
+    <label class="field"><span>Vyhledat na mapě</span>
+      <div class="searchrow">
+        <input type="text" id="f-search" placeholder="Zadej místo nebo adresu">
+        <button id="btn-search" type="button">Hledat</button>
+      </div>
+      <div class="search-results" id="search-results"></div>
+      <div class="minimap" id="minimap"></div>
+      <div class="mini-attrib"><a href="https://mapy.com" target="_blank" rel="noopener">Mapy.com</a> © Seznam.cz a.s. a další</div>
+      <div style="font-size:11px;color:var(--cream-dim);margin-bottom:6px;">Klepnutím na mapu umístíš/posuneš špendlík.</div>
+    </label>
+
+    <div class="coordrow" style="margin-bottom:14px;">
+      <label class="field" style="margin-bottom:0;"><span>Lat</span><input type="number" step="any" id="f-lat"></label>
+      <label class="field" style="margin-bottom:0;"><span>Lng</span><input type="number" step="any" id="f-lng"></label>
+    </div>
+
+    <label class="field"><span>Stav</span>
+      <div class="visited-toggle">
+        <button type="button" id="toggle-visited" data-val="1">Navštíveno</button>
+        <button type="button" id="toggle-wishlist" data-val="0">Chci navštívit</button>
+      </div>
+    </label>
+
+    <label class="field" id="rating-field"><span>Hodnocení</span>
+      <div class="flame-picker" id="flame-picker">
+        <span data-v="1">🔥</span><span data-v="2">🔥</span><span data-v="3">🔥</span><span data-v="4">🔥</span><span data-v="5">🔥</span>
+      </div>
+    </label>
+
+    <label class="field"><span>Fotky</span>
+      <div class="photo-row" id="photo-row">
+        <div class="photo-add" id="photo-add">📷</div>
+      </div>
+      <input type="file" id="f-photo-input" accept="image/*" multiple style="display:none">
+    </label>
+
+    <label class="field"><span>Poznámka</span>
+      <textarea id="f-note" placeholder="Zážitky, tipy, co si zapamatovat..."></textarea>
+    </label>
+
+    <button class="btn-primary" id="btn-save">Uložit kemp</button>
+    <button class="btn-secondary btn-danger" id="btn-delete" style="display:none;">Smazat kemp</button>
+    <button class="btn-secondary" id="btn-cancel">Zrušit</button>
+  </div>
+</div>
+
+<!-- More menu sheet (export/import) -->
+<div class="sheet" id="sheet-more">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h2>Více</h2>
+    <p style="font-size:13px;color:var(--cream-dim);margin-top:-6px;">Kempy se ukládají v cloudu (Firebase) a synchronizují mezi všemi zařízeními, která appku otevřou se stejným nastavením. Export/import je pro záložní kopii navíc.</p>
+    <button class="btn-primary" id="btn-export">⬇️ Exportovat zálohu (JSON)</button>
+    <input type="file" id="import-input" accept="application/json" style="display:none">
+    <button class="btn-secondary" id="btn-import">⬆️ Importovat ze zálohy</button>
+    <button class="btn-secondary" id="btn-close-more">Zavřít</button>
+  </div>
+</div>
+
+<div id="lightbox"><img id="lightbox-img" src=""></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Firebase setup: fill in firebaseConfig below with your own project's values
+     (Firebase Console -> Project settings -> Your apps -> SDK setup and configuration) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, updateDoc, deleteDoc, doc,
+    onSnapshot, query, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import { getStorage, ref, uploadString, getDownloadURL, listAll, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
+
+  // ---- VLOŽ SVOJI FIREBASE KONFIGURACI ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyCcVtnNYufn9q6l0zhmycrTBoCYf-oyNqE",
+    authDomain: "kemping-b0947.firebaseapp.com",
+    projectId: "kemping-b0947",
+    storageBucket: "kemping-b0947.firebasestorage.app",
+    messagingSenderId: "681597967206",
+    appId: "1:681597967206:web:dff00050fac9f8cf9846a7"
+  };
+
+  const needsFirebaseSetup = firebaseConfig.apiKey.startsWith("VLOZ_");
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const storage = getStorage(app);
+
+  window.fb = {
+    db, auth, storage, config: firebaseConfig, needsSetup: needsFirebaseSetup,
+    collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy,
+    ref, uploadString, getDownloadURL, listAll, deleteObject
+  };
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) window.dispatchEvent(new CustomEvent("fb-ready"));
+  });
+
+  if (!needsFirebaseSetup) {
+    signInAnonymously(auth).catch((err) => {
+      console.error("Anonymní přihlášení do Firebase selhalo:", err);
+      window.dispatchEvent(new CustomEvent("fb-error", { detail: err }));
+    });
+  } else {
+    window.dispatchEvent(new CustomEvent("fb-error", { detail: "not-configured" }));
+  }
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     NASTAVENÍ MAPY.COM
+     Zaregistruj se zdarma na https://developer.mapy.com a vlož
+     svůj API klíč sem. Bez klíče se dlaždice mapy nenačtou.
+     ========================================================= */
+  const MAPY_API_KEY = "AJemwjtCN17aArycCDHVb6R4qKHOjAg0TmBus-DTP5c";
+  const needsMapySetup = MAPY_API_KEY.startsWith("VLOZ_");
+
+  let camps = [];
+  let mainMap, minimap, minimapMarker, mainMarkers = {};
+  let currentView = "mapa";
+  let editingId = null;
+  let pendingPhotos = [];
+  let campsCollection = null;
+  let tileErrorShown = false;
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  /* ---------------- Setup banner ---------------- */
+  function checkSetupBanner(){
+    const banner = document.getElementById("setup-banner");
+    const missing = [];
+    if(needsMapySetup) missing.push("API klíč pro Mapy.com");
+    if(window.fb && window.fb.needsSetup) missing.push("konfiguraci Firebase");
+    if(missing.length){
+      banner.innerHTML = `⚠️ Appka ještě potřebuje nastavit: <b>${missing.join(" a ")}</b> — uprav konstanty na začátku <code>index.html</code>.`;
+      banner.classList.add("show");
+    } else {
+      banner.classList.remove("show");
+    }
+  }
+
+  /* ---------------- Sync status ---------------- */
+  function setSyncStatus(state, title){
+    const dot = document.getElementById("sync-dot");
+    dot.className = "sync-dot " + state;
+    if(title) dot.title = title;
+  }
+
+  /* ---------------- Navigation ---------------- */
+  const views = document.querySelectorAll(".view");
+  const navButtons = document.querySelectorAll(".bottom-nav button[data-view]");
+  navButtons.forEach(btn=>{
+    btn.addEventListener("click", ()=> switchView(btn.dataset.view));
+  });
+  function switchView(v){
+    currentView = v;
+    views.forEach(el=> el.classList.toggle("active", el.id === "view-"+v));
+    navButtons.forEach(b=> b.classList.toggle("active", b.dataset.view===v));
+    if(v==="mapa"){ setTimeout(()=>mainMap.invalidateSize(), 50); renderMapMarkers(); }
+    if(v==="navstivene") renderList("visited");
+    if(v==="chci") renderList("wishlist");
+  }
+
+  /* ---------------- Map tile helper (Mapy.com) ---------------- */
+  function mapyTileLayer(mapset){
+    const layer = L.tileLayer(
+      `https://api.mapy.com/v1/maptiles/${mapset}/256@1/{z}/{x}/{y}?apikey=${MAPY_API_KEY}`,
+      { minZoom:0, maxZoom:19, attribution:"" }
+    );
+    layer.on("tileerror", ()=>{
+      if(tileErrorShown) return;
+      tileErrorShown = true;
+      const attrib = document.getElementById("map-attrib");
+      attrib.classList.add("warn");
+      attrib.innerHTML += " — dlaždice se nenačetly, zkontroluj MAPY_API_KEY";
+    });
+    return layer;
+  }
+
+  /* ---------------- Map (main) ---------------- */
+  function initMainMap(){
+    mainMap = L.map("map", {zoomControl:true, attributionControl:false}).setView([49.8, 15.5], 7);
+    const basicLayer = mapyTileLayer("basic");
+    const outdoorLayer = mapyTileLayer("outdoor");
+    basicLayer.addTo(mainMap);
+    L.control.layers({ "Základní": basicLayer, "Turistická": outdoorLayer }, null, {position:"topright"}).addTo(mainMap);
+    renderMapMarkers();
+  }
+  function flameIcon(color){
+    return L.divIcon({
+      className: "",
+      html: `<div style="font-size:26px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))">${color==='ember'?'🔥':'📍'}</div>`,
+      iconSize:[26,26], iconAnchor:[13,22], popupAnchor:[0,-20]
+    });
+  }
+  function renderMapMarkers(){
+    if(!mainMap) return;
+    Object.values(mainMarkers).forEach(m=>mainMap.removeLayer(m));
+    mainMarkers = {};
+    const withLoc = camps.filter(c=> c.lat!=null && c.lng!=null);
+    withLoc.forEach(c=>{
+      const marker = L.marker([c.lat,c.lng], {icon: flameIcon(c.visited?'ember':'moss')}).addTo(mainMap);
+      const flames = c.visited ? "🔥".repeat(c.rating||0) + "🖤".repeat(5-(c.rating||0)) : "na seznamu přání";
+      marker.bindPopup(`<div class="popup-title">${escapeHtml(c.name||"Bez názvu")}</div><div class="popup-flames">${flames}</div>`);
+      marker.on("click", ()=> marker.openPopup());
+      marker.on("popupopen", ()=>{
+        const el = marker.getPopup().getElement();
+        el.addEventListener("click", ()=> openForm(c.id));
+      });
+      mainMarkers[c.id] = marker;
+    });
+    if(withLoc.length){
+      const bounds = L.latLngBounds(withLoc.map(c=>[c.lat,c.lng]));
+      mainMap.fitBounds(bounds.pad(0.25));
+    }
+  }
+
+  /* ---------------- Lists ---------------- */
+  function renderList(kind){
+    const containerId = kind==="visited" ? "list-navstivene" : "list-chci";
+    const container = document.getElementById(containerId);
+    let items = camps.filter(c => kind==="visited" ? c.visited : !c.visited);
+    const sortSel = document.getElementById(kind==="visited"?"sort-visited":"sort-wishlist");
+    const mode = sortSel.value;
+    if(mode==="rating") items.sort((a,b)=> (b.rating||0)-(a.rating||0));
+    else if(mode==="name") items.sort((a,b)=> (a.name||"").localeCompare(b.name||"", "cs"));
+    else if(mode==="date") items.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    else if(mode==="priority") items.sort((a,b)=> (a.order||0)-(b.order||0));
+
+    container.innerHTML = "";
+    if(!items.length){
+      container.innerHTML = `<div class="empty-state"><span class="icon">${kind==="visited"?"🏕️":"⭐"}</span>
+        ${kind==="visited" ? "Zatím žádný navštívený kemp. Přidej první přes tlačítko <b>Přidat</b>." : "Seznam přání je prázdný. Přidej kemp, který chceš navštívit."}</div>`;
+      return;
+    }
+    items.forEach(c=>{
+      const card = document.createElement("div");
+      card.className = "camp-card";
+      const firstPhoto = c.photoUrls && c.photoUrls[0];
+      const thumbStyle = firstPhoto ? `style="background-image:url('${firstPhoto}')"` : "";
+      const flames = c.visited ? "🔥".repeat(c.rating||0) : "";
+      const dateStr = c.createdAt ? new Date(c.createdAt).toLocaleDateString("cs-CZ") : "";
+      card.innerHTML = `
+        <div class="thumb" ${thumbStyle}>${!firstPhoto ? "🏕️" : ""}</div>
+        <div class="info">
+          <div class="row1"><h3>${escapeHtml(c.name||"Bez názvu")}</h3><span class="flames">${flames}</span></div>
+          ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : ""}
+          <div class="meta">${dateStr}</div>
+        </div>`;
+      card.addEventListener("click", ()=> openForm(c.id));
+      if(kind==="wishlist" && mode==="priority"){
+        const reorder = document.createElement("div");
+        reorder.className = "reorder-btns";
+        reorder.innerHTML = `<button data-dir="up">▲</button><button data-dir="down">▼</button>`;
+        reorder.querySelectorAll("button").forEach(btn=>{
+          btn.addEventListener("click", (e)=>{
+            e.stopPropagation();
+            moveInArray(c.id, btn.dataset.dir);
+          });
+        });
+        card.appendChild(reorder);
+      }
+      container.appendChild(card);
+    });
+  }
+  async function moveInArray(id, dir){
+    const wishlist = camps.filter(c=>!c.visited).sort((a,b)=>(a.order||0)-(b.order||0));
+    const idx = wishlist.findIndex(c=>c.id===id);
+    const swapWith = dir==="up" ? idx-1 : idx+1;
+    if(idx<0 || swapWith<0 || swapWith>=wishlist.length) return;
+    const a = wishlist[idx], b = wishlist[swapWith];
+    try{
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,"camps",a.id), {order: b.order||0});
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,"camps",b.id), {order: a.order||0});
+    }catch(err){ console.error(err); alert("Změna pořadí se nepovedla."); }
+  }
+  document.getElementById("sort-visited").addEventListener("change", ()=>renderList("visited"));
+  document.getElementById("sort-wishlist").addEventListener("change", ()=>renderList("wishlist"));
+
+  function escapeHtml(s){
+    return (s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  }
+
+  /* ---------------- Form sheet ---------------- */
+  const backdrop = document.getElementById("backdrop");
+  const sheetForm = document.getElementById("sheet-form");
+  const sheetMore = document.getElementById("sheet-more");
+
+  function openSheet(sheet){
+    backdrop.classList.add("active");
+    sheet.classList.add("active");
+  }
+  function closeSheets(){
+    backdrop.classList.remove("active");
+    sheetForm.classList.remove("active");
+    sheetMore.classList.remove("active");
+  }
+  backdrop.addEventListener("click", closeSheets);
+  document.getElementById("btn-cancel").addEventListener("click", closeSheets);
+  document.getElementById("btn-close-more").addEventListener("click", closeSheets);
+  document.getElementById("btn-more").addEventListener("click", ()=> openSheet(sheetMore));
+  document.getElementById("btn-add").addEventListener("click", ()=> openForm(null));
+
+  let visitedState = true;
+  let ratingState = 0;
+
+  function openForm(id){
+    editingId = id;
+    pendingPhotos = [];
+    const c = id ? camps.find(x=>x.id===id) : null;
+    document.getElementById("form-title").textContent = c ? "Upravit kemp" : "Přidat kemp";
+    document.getElementById("edit-id").value = id || "";
+    document.getElementById("f-name").value = c ? (c.name||"") : "";
+    document.getElementById("f-note").value = c ? (c.note||"") : "";
+    document.getElementById("f-lat").value = c && c.lat!=null ? c.lat : "";
+    document.getElementById("f-lng").value = c && c.lng!=null ? c.lng : "";
+    document.getElementById("f-search").value = "";
+    document.getElementById("search-results").innerHTML = "";
+    visitedState = c ? !!c.visited : true;
+    ratingState = c ? (c.rating||0) : 0;
+    updateVisitedToggle();
+    updateFlamePicker();
+    pendingPhotos = c && c.photoUrls ? [...c.photoUrls] : [];
+    renderPhotoRow();
+    document.getElementById("btn-delete").style.display = c ? "block" : "none";
+    openSheet(sheetForm);
+    setTimeout(initMinimap, 50);
+    setTimeout(()=>{
+      const lat = c && c.lat!=null ? c.lat : 49.8;
+      const lng = c && c.lng!=null ? c.lng : 15.5;
+      minimap.setView([lat,lng], c && c.lat!=null ? 12 : 7);
+      placeMinimapMarker(lat, lng, !!(c && c.lat!=null));
+    }, 60);
+  }
+
+  function updateVisitedToggle(){
+    document.getElementById("toggle-visited").classList.toggle("on", visitedState);
+    document.getElementById("toggle-wishlist").classList.toggle("on", !visitedState);
+    document.getElementById("rating-field").style.display = visitedState ? "block" : "none";
+  }
+  document.getElementById("toggle-visited").addEventListener("click", ()=>{ visitedState=true; updateVisitedToggle(); });
+  document.getElementById("toggle-wishlist").addEventListener("click", ()=>{ visitedState=false; updateVisitedToggle(); });
+
+  function updateFlamePicker(){
+    document.querySelectorAll("#flame-picker span").forEach(s=>{
+      s.classList.toggle("on", Number(s.dataset.v) <= ratingState);
+    });
+  }
+  document.querySelectorAll("#flame-picker span").forEach(s=>{
+    s.addEventListener("click", ()=>{ ratingState = Number(s.dataset.v); updateFlamePicker(); });
+  });
+
+  /* mini map for picking a location */
+  function initMinimap(){
+    if(minimap){ minimap.remove(); minimap=null; }
+    minimap = L.map("minimap", {zoomControl:false, attributionControl:false}).setView([49.8,15.5], 7);
+    mapyTileLayer("basic").addTo(minimap);
+    minimap.on("click", (e)=>{
+      placeMinimapMarker(e.latlng.lat, e.latlng.lng, true);
+      document.getElementById("f-lat").value = e.latlng.lat.toFixed(6);
+      document.getElementById("f-lng").value = e.latlng.lng.toFixed(6);
+    });
+  }
+  function placeMinimapMarker(lat,lng, show){
+    if(minimapMarker){ minimap.removeLayer(minimapMarker); minimapMarker=null; }
+    if(show){
+      minimapMarker = L.marker([lat,lng], {icon: flameIcon('ember')}).addTo(minimap);
+    }
+  }
+  ["f-lat","f-lng"].forEach(id=>{
+    document.getElementById(id).addEventListener("change", ()=>{
+      const lat = parseFloat(document.getElementById("f-lat").value);
+      const lng = parseFloat(document.getElementById("f-lng").value);
+      if(!isNaN(lat) && !isNaN(lng) && minimap){
+        minimap.setView([lat,lng], 12);
+        placeMinimapMarker(lat,lng,true);
+      }
+    });
+  });
+
+  /* location search via Nominatim (free, no key; kept independent of Mapy.com) */
+  document.getElementById("btn-search").addEventListener("click", doSearch);
+  document.getElementById("f-search").addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); doSearch(); }});
+  function doSearch(){
+    const q = document.getElementById("f-search").value.trim();
+    const resultsEl = document.getElementById("search-results");
+    if(!q) return;
+    resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Hledám…</div>`;
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`)
+      .then(r=>r.json())
+      .then(results=>{
+        resultsEl.innerHTML = "";
+        if(!results.length){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Nic nenalezeno.</div>`; return; }
+        results.forEach(r=>{
+          const div = document.createElement("div");
+          div.textContent = r.display_name;
+          div.addEventListener("click", ()=>{
+            const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+            document.getElementById("f-lat").value = lat.toFixed(6);
+            document.getElementById("f-lng").value = lng.toFixed(6);
+            if(!document.getElementById("f-name").value) document.getElementById("f-name").value = r.display_name.split(",")[0];
+            minimap.setView([lat,lng], 13);
+            placeMinimapMarker(lat,lng,true);
+            resultsEl.innerHTML = "";
+          });
+          resultsEl.appendChild(div);
+        });
+      })
+      .catch(()=>{ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Vyhledávání selhalo, zkus zadat souřadnice ručně nebo klepnout na mapu.</div>`; });
+  }
+
+  /* photos */
+  document.getElementById("photo-add").addEventListener("click", ()=> document.getElementById("f-photo-input").click());
+  document.getElementById("f-photo-input").addEventListener("change", (e)=>{
+    const files = Array.from(e.target.files || []);
+    files.forEach(compressAndAddPhoto);
+    e.target.value = "";
+  });
+  function compressAndAddPhoto(file){
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const maxW = 900;
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+        pendingPhotos.push(dataUrl);
+        renderPhotoRow();
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  function renderPhotoRow(){
+    const row = document.getElementById("photo-row");
+    row.querySelectorAll(".photo-thumb").forEach(el=>el.remove());
+    pendingPhotos.forEach((src, i)=>{
+      const div = document.createElement("div");
+      div.className = "photo-thumb";
+      div.innerHTML = `<img src="${src}"><button class="rm" data-i="${i}">✕</button>`;
+      div.querySelector("img").addEventListener("click", ()=> openLightbox(src));
+      div.querySelector(".rm").addEventListener("click", (e)=>{
+        e.stopPropagation();
+        pendingPhotos.splice(i,1);
+        renderPhotoRow();
+      });
+      row.insertBefore(div, document.getElementById("photo-add"));
+    });
+  }
+  function openLightbox(src){
+    document.getElementById("lightbox-img").src = src;
+    document.getElementById("lightbox").classList.add("active");
+  }
+  document.getElementById("lightbox").addEventListener("click", ()=> document.getElementById("lightbox").classList.remove("active"));
+
+  /* save / delete (Firestore + Storage) */
+  const btnSave = document.getElementById("btn-save");
+  btnSave.addEventListener("click", async ()=>{
+    if(!campsCollection){ alert("Appka ještě není připojená k databázi. Zkontroluj Firebase nastavení a připojení k internetu."); return; }
+    const name = document.getElementById("f-name").value.trim();
+    if(!name){ alert("Zadej název kempu."); return; }
+    const lat = parseFloat(document.getElementById("f-lat").value);
+    const lng = parseFloat(document.getElementById("f-lng").value);
+    const note = document.getElementById("f-note").value.trim();
+    const id = document.getElementById("edit-id").value;
+
+    btnSave.disabled = true;
+    btnSave.textContent = "Ukládám…";
+    try{
+      let campId = id;
+      const baseData = {
+        name, note,
+        lat: isNaN(lat)?null:lat, lng: isNaN(lng)?null:lng,
+        visited: visitedState, rating: visitedState ? ratingState : 0
+      };
+      if(!campId){
+        const newRef = await window.fb.addDoc(campsCollection, {
+          ...baseData, photoUrls: [], order: Date.now(), createdAt: Date.now()
+        });
+        campId = newRef.id;
+      }
+      const finalPhotoUrls = [];
+      for(const p of pendingPhotos){
+        if(p.startsWith("data:")){
+          const path = `camps/${campId}/${uid()}.jpg`;
+          const sref = window.fb.ref(window.fb.storage, path);
+          await window.fb.uploadString(sref, p, "data_url");
+          finalPhotoUrls.push(await window.fb.getDownloadURL(sref));
+        } else {
+          finalPhotoUrls.push(p);
+        }
+      }
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,"camps",campId), {
+        ...baseData, photoUrls: finalPhotoUrls
+      });
+      closeSheets();
+    }catch(err){
+      console.error(err);
+      alert("Uložení se nepovedlo. Zkontroluj připojení k internetu a nastavení Firebase (viz banner nahoře, pokud se zobrazuje).");
+    }finally{
+      btnSave.disabled = false;
+      btnSave.textContent = "Uložit kemp";
+    }
+  });
+
+  document.getElementById("btn-delete").addEventListener("click", async ()=>{
+    const id = document.getElementById("edit-id").value;
+    if(!id) return;
+    if(!confirm("Opravdu smazat tento kemp?")) return;
+    try{
+      try{
+        const folderRef = window.fb.ref(window.fb.storage, `camps/${id}`);
+        const list = await window.fb.listAll(folderRef);
+        await Promise.all(list.items.map(item=>window.fb.deleteObject(item)));
+      }catch(e){ console.warn("Mazání fotek se nepovedlo (pokračuji):", e); }
+      await window.fb.deleteDoc(window.fb.doc(window.fb.db,"camps",id));
+      closeSheets();
+    }catch(err){
+      console.error(err);
+      alert("Smazání se nepovedlo.");
+    }
+  });
+
+  /* ---------------- Export / Import ---------------- */
+  document.getElementById("btn-export").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(camps, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kempy-zaloha-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById("btn-import").addEventListener("click", ()=> document.getElementById("import-input").click());
+  document.getElementById("import-input").addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(!Array.isArray(data)) throw new Error("bad format");
+        if(!campsCollection){ alert("Appka ještě není připojená k databázi."); return; }
+        if(!confirm(`Naimportovat ${data.length} kempů do sdílené databáze? Může to vytvořit duplicity, pokud už tam podobné kempy jsou.`)) return;
+        for(const item of data){
+          await window.fb.addDoc(campsCollection, {
+            name: item.name || "Bez názvu",
+            note: item.note || "",
+            lat: item.lat ?? null,
+            lng: item.lng ?? null,
+            visited: !!item.visited,
+            rating: item.rating || 0,
+            photoUrls: item.photoUrls || item.photos || [],
+            order: item.order || Date.now(),
+            createdAt: item.createdAt || item.dateAdded || Date.now()
+          });
+        }
+        closeSheets();
+        alert("Import hotov.");
+      }catch(err){
+        console.error(err);
+        alert("Soubor se nepodařilo načíst jako platnou zálohu.");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  /* ---------------- Firestore realtime sync ---------------- */
+  function startSync(){
+    setSyncStatus("connecting", "Připojování…");
+    campsCollection = window.fb.collection(window.fb.db, "camps");
+    const q = window.fb.query(campsCollection, window.fb.orderBy("order","asc"));
+    window.fb.onSnapshot(q, (snap)=>{
+      camps = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      renderMapMarkers();
+      renderList("visited");
+      renderList("wishlist");
+      setSyncStatus("ok", "Synchronizováno");
+    }, (err)=>{
+      console.error("Firestore sync error:", err);
+      setSyncStatus("error", "Chyba připojení k databázi");
+    });
+  }
+  window.addEventListener("fb-ready", ()=>{ checkSetupBanner(); startSync(); });
+  window.addEventListener("fb-error", ()=>{ checkSetupBanner(); setSyncStatus("error", "Nepřipojeno — zkontroluj Firebase nastavení"); });
+
+  /* ---------------- Init ---------------- */
+  checkSetupBanner();
+  initMainMap();
+  switchView("mapa");
+})();
+</script>
+</body>
+</html>
