@@ -48,7 +48,8 @@
   .setup-banner{
     display:none; position:fixed; top:0; left:0; right:0; z-index:100;
     background: var(--ember-deep); color:#fff; font-size:12px; line-height:1.4;
-    padding:9px 16px; text-align:center;
+    padding: calc(9px + env(safe-area-inset-top, 0px)) 16px 9px;
+    text-align:center;
   }
   .setup-banner.show{ display:block; }
   .setup-banner code{ background:rgba(0,0,0,0.25); padding:1px 5px; border-radius:4px; }
@@ -56,7 +57,7 @@
   /* ---------- Header ---------- */
   header{
     position:relative;
-    padding: 22px 20px 16px;
+    padding: calc(22px + env(safe-area-inset-top, 0px)) 20px 16px;
     border-bottom: 1px solid var(--line);
     overflow:hidden;
     flex-shrink:0;
@@ -694,35 +695,48 @@
     });
   });
 
-  /* location search via Nominatim (free, no key; kept independent of Mapy.com) */
-  document.getElementById("btn-search").addEventListener("click", doSearch);
-  document.getElementById("f-search").addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); doSearch(); }});
-  function doSearch(){
-    const q = document.getElementById("f-search").value.trim();
+  /* location autocomplete via Mapy.com Suggest API */
+  let suggestTimer = null;
+  let suggestSeq = 0;
+  document.getElementById("btn-search").addEventListener("click", ()=> doSuggest(document.getElementById("f-search").value.trim()));
+  document.getElementById("f-search").addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); doSuggest(e.target.value.trim()); }});
+  document.getElementById("f-search").addEventListener("input", (e)=>{
+    const q = e.target.value.trim();
+    clearTimeout(suggestTimer);
     const resultsEl = document.getElementById("search-results");
-    if(!q) return;
+    if(q.length < 2){ resultsEl.innerHTML = ""; return; }
+    suggestTimer = setTimeout(()=> doSuggest(q), 280);
+  });
+  function doSuggest(q){
+    const resultsEl = document.getElementById("search-results");
+    if(!q){ resultsEl.innerHTML = ""; return; }
+    if(needsMapySetup){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Chybí Mapy.com API klíč.</div>`; return; }
+    const mySeq = ++suggestSeq;
     resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Hledám…</div>`;
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`)
+    fetch(`https://api.mapy.com/v1/suggest?apikey=${MAPY_API_KEY}&query=${encodeURIComponent(q)}&lang=cs&limit=6`)
       .then(r=>r.json())
-      .then(results=>{
+      .then(data=>{
+        if(mySeq !== suggestSeq) return; // stale response, newer query already in flight
+        const items = data.items || [];
         resultsEl.innerHTML = "";
-        if(!results.length){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Nic nenalezeno.</div>`; return; }
-        results.forEach(r=>{
+        if(!items.length){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Nic nenalezeno.</div>`; return; }
+        items.forEach(item=>{
           const div = document.createElement("div");
-          div.textContent = r.display_name;
+          div.innerHTML = `<b>${escapeHtml(item.name)}</b><br><span style="color:var(--cream-dim);font-size:11px;">${escapeHtml(item.location||item.label||"")}</span>`;
           div.addEventListener("click", ()=>{
-            const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+            const lat = item.position.lat, lng = item.position.lon;
             document.getElementById("f-lat").value = lat.toFixed(6);
             document.getElementById("f-lng").value = lng.toFixed(6);
-            if(!document.getElementById("f-name").value) document.getElementById("f-name").value = r.display_name.split(",")[0];
-            minimap.setView([lat,lng], 13);
+            if(!document.getElementById("f-name").value) document.getElementById("f-name").value = item.name;
+            minimap.setView([lat,lng], 14);
             placeMinimapMarker(lat,lng,true);
             resultsEl.innerHTML = "";
+            document.getElementById("f-search").value = item.name;
           });
           resultsEl.appendChild(div);
         });
       })
-      .catch(()=>{ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Vyhledávání selhalo, zkus zadat souřadnice ručně nebo klepnout na mapu.</div>`; });
+      .catch(()=>{ if(mySeq === suggestSeq) resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Vyhledávání selhalo, zkus zadat souřadnice ručně nebo klepnout na mapu.</div>`; });
   }
 
   /* photos */
