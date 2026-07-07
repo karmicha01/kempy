@@ -100,6 +100,7 @@
     position:absolute; left:10px; bottom:14px; z-index:500;
     background: rgba(16,28,23,0.78); color: var(--cream-dim); font-size:11px;
     padding:5px 9px; border-radius:8px; backdrop-filter: blur(2px);
+    display:flex; align-items:center;
   }
   .map-attrib a{ color: var(--ember-soft); font-weight:700; text-decoration:none; }
   .map-attrib.warn{ color: #ffd9c7; }
@@ -254,7 +255,10 @@
   <main>
     <div class="view view-map" id="view-mapa">
       <div id="map"></div>
-      <div class="map-attrib" id="map-attrib"><a href="https://mapy.com" target="_blank" rel="noopener">Mapy.com</a> · © Seznam.cz a.s. a další</div>
+      <div class="map-attrib" id="map-attrib">
+        <a href="https://mapy.com" target="_blank" rel="noopener"><img src="https://api.mapy.com/img/api/logo.svg" alt="Mapy.com" style="height:16px;vertical-align:middle;display:block;"></a>
+        <a href="https://api.mapy.com/copyright" target="_blank" rel="noopener" style="margin-left:8px;">© Seznam.cz a.s. a další</a>
+      </div>
     </div>
 
     <div class="view" id="view-navstivene">
@@ -476,7 +480,7 @@
   /* ---------------- Map tile helper (Mapy.com) ---------------- */
   function mapyTileLayer(mapset){
     const layer = L.tileLayer(
-      `https://api.mapy.com/v1/maptiles/${mapset}/256@1/{z}/{x}/{y}?apikey=${MAPY_API_KEY}`,
+      `https://api.mapy.com/v1/maptiles/${mapset}/256/{z}/{x}/{y}?apikey=${MAPY_API_KEY}`,
       { minZoom:0, maxZoom:19, attribution:"" }
     );
     layer.on("tileerror", ()=>{
