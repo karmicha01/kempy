@@ -92,7 +92,7 @@
 
   /* ---------- Views ---------- */
   main{ flex:1; min-height:0; position:relative; }
-  .view{ position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:none; padding-bottom: calc(100px + var(--safe-bottom)); }
+  .view{ position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:none; padding-bottom: calc(90px + var(--safe-bottom)); }
   .view.active{ display:block; }
 
   #map{ position:absolute; inset:0; }
@@ -161,24 +161,37 @@
     color: var(--ember-soft); text-decoration:none; border:1px solid var(--line); white-space:nowrap;
   }
 
-  /* ---------- Bottom nav + FAB ---------- */
-  nav.bottom-nav{
-    flex-shrink:0;
-    display:flex;
-    border-top: 1px solid var(--line);
-    background: var(--bg-elevated);
-    padding-bottom: var(--safe-bottom);
-    z-index: 20;
+  /* ---------- Hamburger + Drawer + FAB ---------- */
+  .hamburger{
+    position:absolute; top: calc(30px + env(safe-area-inset-top, 0px)); left:18px;
+    background:none; border:none; color: var(--cream); font-size:22px; z-index:5; padding:4px;
+    line-height:1;
   }
-  nav.bottom-nav button{
-    flex:1; background:none; border:none; color: var(--cream-dim);
-    font-family: var(--font-body); font-size: 10.5px; padding: 9px 4px 8px;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
+  .header-text{ margin-left:36px; }
+  .drawer-backdrop{
+    position:fixed; inset:0; background: rgba(6,10,8,0.6); backdrop-filter: blur(2px);
+    z-index: 70; display:none;
   }
-  nav.bottom-nav button .ic{ font-size:19px; }
-  nav.bottom-nav button.active{ color: var(--ember-soft); }
+  .drawer-backdrop.active{ display:block; }
+  .drawer{
+    position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px;
+    background: var(--bg-elevated); z-index:71; transform: translateX(-100%);
+    transition: transform .25s ease; display:flex; flex-direction:column;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  }
+  .drawer.active{ transform: translateX(0); }
+  .drawer-header{ padding: 20px 18px 14px; border-bottom: 1px solid var(--line); }
+  .drawer-header h2{ font-family: var(--font-display); font-size:19px; margin:0; }
+  .drawer-item{
+    display:flex; align-items:center; gap:12px; text-align:left; background:none; border:none;
+    color: var(--cream-dim); font-size:14.5px; padding:14px 18px; font-family: var(--font-body);
+  }
+  .drawer-item .ic{ font-size:18px; width:22px; text-align:center; }
+  .drawer-item.active{ color: var(--ember-soft); background: rgba(232,163,61,0.08); font-weight:700; }
+  .drawer-sep{ height:1px; background: var(--line); margin:8px 0; }
   .fab{
-    position:fixed; right:18px; bottom: calc(80px + var(--safe-bottom));
+    position:fixed; right:18px; bottom: calc(24px + var(--safe-bottom));
     width:56px; height:56px; border-radius:50%; border:none;
     background: var(--ember); color:#221200; font-size:26px; font-weight:700;
     box-shadow: 0 6px 18px rgba(0,0,0,0.45); z-index:25;
@@ -309,8 +322,11 @@
 <div class="setup-banner" id="setup-banner"></div>
 <div id="app">
   <header>
-    <h1><span class="flame">🔥</span> Naše kempy</h1>
-    <p>Deník cest, kempy a Žolíky <span class="sync-dot connecting" id="sync-dot" title="Připojování…"></span></p>
+    <button class="hamburger" id="btn-menu" aria-label="Menu">☰</button>
+    <div class="header-text">
+      <h1><span class="flame">🔥</span> Naše kempy</h1>
+      <p>Deník cest, kempy a Žolíky <span class="sync-dot connecting" id="sync-dot" title="Připojování…"></span></p>
+    </div>
   </header>
 
   <main>
@@ -335,8 +351,15 @@
     </div>
 
     <div class="view" id="view-denik">
-      <div class="list-toolbar"><h2>Deník z cest</h2></div>
-      <div id="list-denik" class="card-list"></div>
+      <div id="denik-folders-wrap">
+        <div class="list-toolbar"><h2>Deník z cest</h2></div>
+        <div id="list-denik-folders" class="card-list"></div>
+      </div>
+      <div id="denik-entries-wrap" style="display:none;">
+        <div class="zolik-detail-header"><button class="zolik-back" id="denik-back-btn">‹ Zpět na složky</button></div>
+        <div class="list-toolbar"><h2 id="denik-folder-title">Nezařazené</h2></div>
+        <div id="list-denik-entries" class="card-list"></div>
+      </div>
     </div>
 
     <div class="view" id="view-zolik">
@@ -346,18 +369,28 @@
       </div>
       <div id="zolik-detail-wrap" style="display:none;"></div>
     </div>
-  </main>
 
-  <nav class="bottom-nav">
-    <button data-view="mapa" class="active"><span class="ic">🗺️</span>Mapa</button>
-    <button data-view="kempy"><span class="ic">🏕️</span>Kempy</button>
-    <button data-view="denik"><span class="ic">📖</span>Deník</button>
-    <button data-view="zolik"><span class="ic">🃏</span>Žolík</button>
-    <button id="btn-more"><span class="ic">⋯</span>Více</button>
-  </nav>
+    <div class="view" id="view-checklist">
+      <div class="list-toolbar"><h2>Odjezdový checklist</h2></div>
+      <div class="empty-state"><span class="icon">✅</span>Tahle sekce je zatím prázdná — brzy sem přidáme check-listy na sbalení před odjezdem.</div>
+    </div>
+  </main>
 
   <button class="fab" id="fab-add">➕</button>
 </div>
+
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<nav class="drawer" id="drawer">
+  <div class="drawer-header"><h2>🔥 Naše kempy</h2></div>
+  <button class="drawer-item active" data-view="mapa"><span class="ic">🗺️</span> Mapa</button>
+  <button class="drawer-item" data-view="kempy"><span class="ic">🏕️</span> Kempy</button>
+  <button class="drawer-item" data-view="denik"><span class="ic">📖</span> Deník</button>
+  <button class="drawer-item" data-view="zolik"><span class="ic">🃏</span> Žolík</button>
+  <button class="drawer-item" data-view="checklist"><span class="ic">✅</span> Odjezdový checklist</button>
+  <div class="drawer-sep"></div>
+  <button class="drawer-item" id="btn-export"><span class="ic">⬇️</span> Exportovat zálohu</button>
+  <button class="drawer-item" id="btn-import"><span class="ic">⬆️</span> Importovat ze zálohy</button>
+</nav>
 
 <div class="sheet-backdrop" id="backdrop"></div>
 
@@ -390,6 +423,7 @@
 
     <label class="field"><span>Odkaz Google Maps (nepovinné)</span>
       <input type="text" id="f-gmaps" placeholder="https://maps.google.com/…">
+      <button type="button" class="btn-chip" id="btn-import-gmaps" style="margin-top:8px;">📍 Načíst polohu z odkazu</button>
     </label>
     <label class="field"><span>Odkaz Mapy.com (nepovinné)</span>
       <input type="text" id="f-mapyurl" placeholder="https://mapy.com/…">
@@ -476,19 +510,7 @@
   </div>
 </div>
 
-<!-- More menu sheet (export/import) -->
-<div class="sheet" id="sheet-more">
-  <div class="sheet-handle"></div>
-  <div class="sheet-body">
-    <h2>Více</h2>
-    <p style="font-size:13px;color:var(--cream-dim);margin-top:-6px;">Kempy, deník i hry Žolíky se ukládají v cloudu (Firebase) a synchronizují mezi zařízeními. Export/import je záložní kopie navíc.</p>
-    <button class="btn-primary" id="btn-export">⬇️ Exportovat zálohu (JSON)</button>
-    <input type="file" id="import-input" accept="application/json" style="display:none">
-    <button class="btn-secondary" id="btn-import">⬆️ Importovat ze zálohy</button>
-    <button class="btn-secondary" id="btn-close-more">Zavřít</button>
-  </div>
-</div>
-
+<input type="file" id="import-input" accept="application/json" style="display:none">
 <div id="lightbox"><img id="lightbox-img" src=""></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -550,13 +572,15 @@
 
   let camps = [];
   let diaryEntries = [];
+  let diaryFolders = [];
+  let currentDiaryFolderId = null;
   let zolikGames = [];
   let mainMap, minimap, minimapMarker, mainMarkers = {};
   let currentView = "mapa";
   let currentKempyTab = "visited";
   let currentGameId = null;
   let pendingPhotos = [];
-  let campsCollection = null, diaryCollection = null, zolikCollection = null;
+  let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null;
   let tileErrorShown = false;
 
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -585,29 +609,28 @@
 
   /* ---------------- Navigation ---------------- */
   const views = document.querySelectorAll(".view");
-  const navButtons = document.querySelectorAll(".bottom-nav button[data-view]");
-  navButtons.forEach(btn=>{
-    btn.addEventListener("click", ()=> switchView(btn.dataset.view));
-  });
   function switchView(v){
     currentView = v;
     views.forEach(el=> el.classList.toggle("active", el.id === "view-"+v));
-    navButtons.forEach(b=> b.classList.toggle("active", b.dataset.view===v));
     if(v==="mapa"){ setTimeout(()=>mainMap.invalidateSize(), 50); renderMapMarkers(); }
     if(v==="kempy") renderKempyList();
-    if(v==="denik") renderDiaryList();
+    if(v==="denik") showDiaryFolderList();
     if(v==="zolik") renderZolikList();
     updateFab();
   }
   function updateFab(){
     const fab = document.getElementById("fab-add");
     if(currentView==="zolik" && currentGameId){ fab.classList.add("hidden"); return; }
+    if(currentView==="checklist"){ fab.classList.add("hidden"); return; }
     fab.classList.remove("hidden");
     fab.textContent = "➕";
   }
   document.getElementById("fab-add").addEventListener("click", ()=>{
     if(currentView==="mapa" || currentView==="kempy") openForm(null);
-    else if(currentView==="denik") openDiaryForm(null);
+    else if(currentView==="denik"){
+      if(currentDiaryFolderId===null) createDiaryFolder();
+      else openDiaryForm(null);
+    }
     else if(currentView==="zolik") openZolikNewGame();
   });
 
@@ -759,11 +782,10 @@
   /* ---------------- Camp form sheet ---------------- */
   const backdrop = document.getElementById("backdrop");
   const sheetForm = document.getElementById("sheet-form");
-  const sheetMore = document.getElementById("sheet-more");
   const sheetDiary = document.getElementById("sheet-diary");
   const sheetDiaryView = document.getElementById("sheet-diary-view");
   const sheetZolikNew = document.getElementById("sheet-zolik-new");
-  const allSheets = [sheetForm, sheetMore, sheetDiary, sheetDiaryView, sheetZolikNew];
+  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew];
 
   function openSheet(sheet){
     backdrop.classList.add("active");
@@ -775,8 +797,23 @@
   }
   backdrop.addEventListener("click", closeSheets);
   document.getElementById("btn-cancel").addEventListener("click", closeSheets);
-  document.getElementById("btn-close-more").addEventListener("click", closeSheets);
-  document.getElementById("btn-more").addEventListener("click", ()=> openSheet(sheetMore));
+
+  /* ---------------- Drawer navigation ---------------- */
+  const drawer = document.getElementById("drawer");
+  const drawerBackdrop = document.getElementById("drawer-backdrop");
+  function openDrawer(){ drawer.classList.add("active"); drawerBackdrop.classList.add("active"); }
+  function closeDrawer(){ drawer.classList.remove("active"); drawerBackdrop.classList.remove("active"); }
+  document.getElementById("btn-menu").addEventListener("click", openDrawer);
+  drawerBackdrop.addEventListener("click", closeDrawer);
+  document.querySelectorAll(".drawer-item[data-view]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      switchView(btn.dataset.view);
+      document.querySelectorAll(".drawer-item[data-view]").forEach(b=>b.classList.toggle("active", b===btn));
+      closeDrawer();
+    });
+  });
+  document.getElementById("btn-export").addEventListener("click", closeDrawer);
+  document.getElementById("btn-import").addEventListener("click", ()=>{ closeDrawer(); document.getElementById("import-input").click(); });
 
   let visitedState = true;
   let ratingState = 0;
@@ -900,6 +937,44 @@
       .catch(()=>{ if(mySeq === suggestSeq) resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Vyhledávání selhalo, zkus zadat souřadnice ručně nebo klepnout na mapu.</div>`; });
   }
 
+  /* Google Maps link -> lat/lng/name import */
+  function parseGoogleMapsUrl(url){
+    try{
+      let lat=null, lng=null, name=null;
+      let m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if(m){ lat=parseFloat(m[1]); lng=parseFloat(m[2]); }
+      if(lat==null){
+        m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+        if(m){ lat=parseFloat(m[1]); lng=parseFloat(m[2]); }
+      }
+      if(lat==null){
+        m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+        if(m){ lat=parseFloat(m[1]); lng=parseFloat(m[2]); }
+      }
+      const nameMatch = url.match(/\/maps\/place\/([^/@]+)/);
+      if(nameMatch){ name = decodeURIComponent(nameMatch[1].replace(/\+/g,' ')); }
+      if(lat==null && !name) return null;
+      return {lat, lng, name};
+    }catch(e){ return null; }
+  }
+  document.getElementById("btn-import-gmaps").addEventListener("click", ()=>{
+    const url = document.getElementById("f-gmaps").value.trim();
+    if(!url){ alert("Nejdřív vlož odkaz na Google Maps do pole výše."); return; }
+    const res = parseGoogleMapsUrl(url);
+    if(!res || (res.lat==null && !res.name)){
+      alert("Z tohohle odkazu se nepodařilo vyčíst polohu. Zkrácené odkazy (goo.gl/maps, maps.app.goo.gl) appka bohužel neumí rozbalit — otevři odkaz v prohlížeči a zkopíruj celou adresu z adresního řádku (měla by obsahovat @čísla,čísla).");
+      return;
+    }
+    if(res.lat!=null){
+      document.getElementById("f-lat").value = res.lat.toFixed(6);
+      document.getElementById("f-lng").value = res.lng.toFixed(6);
+      if(minimap){ minimap.setView([res.lat,res.lng], 14); placeMinimapMarker(res.lat,res.lng,true); }
+    }
+    if(res.name && !document.getElementById("f-name").value){
+      document.getElementById("f-name").value = res.name;
+    }
+  });
+
   /* photos */
   document.getElementById("photo-add").addEventListener("click", ()=> document.getElementById("f-photo-input").click());
   document.getElementById("f-photo-input").addEventListener("change", async (e)=>{
@@ -913,12 +988,31 @@
     const addBtn = document.getElementById("photo-add");
     const originalLabel = addBtn.textContent;
     addBtn.textContent = "⏳";
+    // Step 1: guaranteed-to-work raw preview via FileReader (no canvas/decode involved)
+    let rawDataUrl;
+    try{
+      rawDataUrl = await new Promise((resolve, reject)=>{
+        const reader = new FileReader();
+        reader.onerror = ()=> reject(reader.error || new Error("FileReader failed"));
+        reader.onload = ()=> resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }catch(err){
+      console.error("Čtení souboru selhalo:", err);
+      alert("Tenhle soubor se nepodařilo načíst. Zkus prosím jinou fotku.");
+      addBtn.textContent = originalLabel;
+      return;
+    }
+    const entryIndex = pendingPhotos.length;
+    pendingPhotos.push(rawDataUrl);
+    renderPhotoRow();
+    // Step 2: best-effort compression; if it fails, we already have a working (larger) photo
     try{
       let bitmap;
       if(window.createImageBitmap){
         bitmap = await createImageBitmap(file);
       } else {
-        bitmap = await legacyLoadImage(file);
+        bitmap = await legacyLoadImage(rawDataUrl);
       }
       const maxW = 1200;
       const scale = Math.min(1, maxW / bitmap.width);
@@ -928,27 +1022,23 @@
       const ctx = canvas.getContext("2d");
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       if(bitmap.close) bitmap.close();
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-      pendingPhotos.push(dataUrl);
-      renderPhotoRow();
+      const compressed = canvas.toDataURL("image/jpeg", 0.72);
+      if(compressed && compressed.length < rawDataUrl.length && pendingPhotos[entryIndex] === rawDataUrl){
+        pendingPhotos[entryIndex] = compressed;
+        renderPhotoRow();
+      }
     }catch(err){
-      console.error("Zpracování fotky selhalo:", err);
-      alert("Tuhle fotku se nepodařilo zpracovat (může to být kvůli vysokému rozlišení nebo formátu). Zkus to prosím znovu, případně jinou fotku.");
+      console.warn("Komprese fotky selhala, používám originál:", err);
     }finally{
       addBtn.textContent = originalLabel;
     }
   }
-  function legacyLoadImage(file){
+  function legacyLoadImage(dataUrl){
     return new Promise((resolve, reject)=>{
-      const reader = new FileReader();
-      reader.onerror = ()=> reject(reader.error || new Error("FileReader failed"));
-      reader.onload = (ev)=>{
-        const img = new Image();
-        img.onerror = ()=> reject(new Error("Image decode failed"));
-        img.onload = ()=> resolve(img);
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
+      const img = new Image();
+      img.onerror = ()=> reject(new Error("Image decode failed"));
+      img.onload = ()=> resolve(img);
+      img.src = dataUrl;
     });
   }
   function renderPhotoRow(){
@@ -1044,13 +1134,82 @@
     }
   });
 
-  /* ================= DIARY (Deník) ================= */
-  function renderDiaryList(){
-    const container = document.getElementById("list-denik");
-    const items = [...diaryEntries].sort((a,b)=> (b.tripDate||"").localeCompare(a.tripDate||"") || (b.createdAt||0)-(a.createdAt||0));
+  /* ================= DIARY (Deník) — folders ================= */
+  function showDiaryFolderList(){
+    currentDiaryFolderId = null;
+    document.getElementById("denik-folders-wrap").style.display = "block";
+    document.getElementById("denik-entries-wrap").style.display = "none";
+    renderDiaryFolders();
+    updateFab();
+  }
+  function openDiaryFolder(folderId){
+    currentDiaryFolderId = folderId;
+    document.getElementById("denik-folders-wrap").style.display = "none";
+    document.getElementById("denik-entries-wrap").style.display = "block";
+    const folder = diaryFolders.find(f=>f.id===folderId);
+    document.getElementById("denik-folder-title").textContent = folderId==="unfiled" ? "Nezařazené" : (folder ? folder.name : "Složka");
+    renderDiaryEntries();
+    updateFab();
+  }
+  document.getElementById("denik-back-btn").addEventListener("click", showDiaryFolderList);
+
+  function entriesInFolder(folderId){
+    return diaryEntries.filter(d=> folderId==="unfiled" ? !d.folderId : d.folderId===folderId);
+  }
+
+  function renderDiaryFolders(){
+    const container = document.getElementById("list-denik-folders");
+    container.innerHTML = "";
+    const realFolders = [...diaryFolders].sort((a,b)=>(a.name||"").localeCompare(b.name||"","cs"));
+    const unfiledCount = entriesInFolder("unfiled").length;
+    if(!realFolders.length && !unfiledCount){
+      container.innerHTML = `<div class="empty-state"><span class="icon">📖</span>Zatím žádné složky ani zápisy. Přidej první složku (např. podle dovolené) přes ➕.</div>`;
+      return;
+    }
+    realFolders.forEach(f=>{
+      const count = entriesInFolder(f.id).length;
+      const card = document.createElement("div");
+      card.className = "zolik-card";
+      card.innerHTML = `<h3>📁 ${escapeHtml(f.name)}</h3><div class="players">${count} ${count===1?"zápis":(count>=2&&count<=4?"zápisy":"zápisů")}</div>`;
+      card.addEventListener("click", ()=> openDiaryFolder(f.id));
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn-chip btn-danger";
+      delBtn.style.marginTop = "10px";
+      delBtn.textContent = "🗑️ Smazat složku";
+      delBtn.addEventListener("click", async (e)=>{
+        e.stopPropagation();
+        if(count>0){ alert("Složka obsahuje zápisy — nejdřív je přesuň nebo smaž, pak lze složku odstranit."); return; }
+        if(!confirm(`Smazat prázdnou složku "${f.name}"?`)) return;
+        try{ await window.fb.deleteDoc(window.fb.doc(window.fb.db,"diary_folders",f.id)); }
+        catch(err){ console.error(err); alert("Smazání se nepovedlo."); }
+      });
+      card.appendChild(delBtn);
+      container.appendChild(card);
+    });
+    if(unfiledCount || !realFolders.length){
+      const card = document.createElement("div");
+      card.className = "zolik-card";
+      card.innerHTML = `<h3>🗂️ Nezařazené</h3><div class="players">${unfiledCount} ${unfiledCount===1?"zápis":(unfiledCount>=2&&unfiledCount<=4?"zápisy":"zápisů")}</div>`;
+      card.addEventListener("click", ()=> openDiaryFolder("unfiled"));
+      container.appendChild(card);
+    }
+  }
+
+  async function createDiaryFolder(){
+    if(!diaryFoldersCollection){ alert("Appka ještě není připojená k databázi."); return; }
+    const name = prompt("Název složky (např. název dovolené):");
+    if(!name || !name.trim()) return;
+    try{
+      await window.fb.addDoc(diaryFoldersCollection, { name: name.trim(), createdAt: Date.now() });
+    }catch(err){ console.error(err); alert("Založení složky se nepovedlo."); }
+  }
+
+  function renderDiaryEntries(){
+    const container = document.getElementById("list-denik-entries");
+    const items = entriesInFolder(currentDiaryFolderId).sort((a,b)=> (b.tripDate||"").localeCompare(a.tripDate||"") || (b.createdAt||0)-(a.createdAt||0));
     container.innerHTML = "";
     if(!items.length){
-      container.innerHTML = `<div class="empty-state"><span class="icon">📖</span>Zatím žádný zápis. Přidej první přes ➕.</div>`;
+      container.innerHTML = `<div class="empty-state"><span class="icon">📖</span>Zatím žádný zápis v téhle složce. Přidej první přes ➕.</div>`;
       return;
     }
     items.forEach(d=>{
@@ -1172,7 +1331,8 @@
       if(id){
         await window.fb.updateDoc(window.fb.doc(window.fb.db,"diary",id), { title, tripDate, text });
       } else {
-        await window.fb.addDoc(diaryCollection, { title, tripDate, text, createdAt: Date.now() });
+        const folderId = (currentDiaryFolderId && currentDiaryFolderId!=="unfiled") ? currentDiaryFolderId : null;
+        await window.fb.addDoc(diaryCollection, { title, tripDate, text, folderId, createdAt: Date.now() });
       }
       closeSheets();
     }catch(err){
@@ -1233,11 +1393,25 @@
 
   function openZolikGame(id){
     currentGameId = id;
+    zolikEditRoundIndex = null;
     document.getElementById("zolik-list-wrap").style.display = "none";
     document.getElementById("zolik-detail-wrap").style.display = "block";
     updateFab();
     renderZolikDetail();
   }
+
+  function computeJokersFromRounds(players, rounds){
+    const bank = {};
+    players.forEach(p=> bank[p]=0);
+    rounds.forEach(r=>{
+      (r.jokersAwarded||[]).forEach(p=>{
+        if(bank[p]!=null && bank[p]<4) bank[p]++;
+      });
+    });
+    return bank;
+  }
+
+  let zolikEditRoundIndex = null;
 
   function renderZolikDetail(){
     const wrap = document.getElementById("zolik-detail-wrap");
@@ -1249,6 +1423,7 @@
     const totals = zolikTotals(game);
     const roundsPlayed = rounds.length;
     const finished = !!game.finished || roundsPlayed>=10;
+    const editIdx = zolikEditRoundIndex;
 
     let html = `
       <div class="zolik-detail-header">
@@ -1267,35 +1442,66 @@
     if(finished){
       const ranking = Object.entries(totals).sort((a,b)=>a[1]-b[1]);
       html += `<div class="finished-banner">🏆 Hra dokončena! Vítěz: <b>${escapeHtml(ranking[0][0])}</b> (${ranking[0][1]} bodů)</div>`;
-      html += `<div style="margin:0 18px;"><button class="btn-secondary btn-danger" id="zolik-delete-btn">Smazat hru</button></div>`;
-    } else {
-      const dealerIdx = ((game.dealerStartIndex||0) + roundsPlayed) % players.length;
-      html += `<div class="dealer-tag">🔀 Rozdává: <b>${escapeHtml(players[dealerIdx])}</b></div>`;
-      html += `<div class="round-box"><h4>Kolo ${roundsPlayed+1} / 10</h4>`;
-      players.forEach((p,idx)=>{
-        const bank = jokers[p]||0;
-        html += `<div class="round-entry-row">
-          <label for="rs-${idx}">${escapeHtml(p)}${bank?`<span class="joker-badge">🃏×${bank}</span>`:""}</label>
-          <input type="number" id="rs-${idx}" min="0" value="0">
-          <span class="round-joker-check" id="rj-wrap-${idx}"><input type="checkbox" id="rj-${idx}"> 🃏 do dalšího kola</span>
-        </div>`;
-      });
-      html += `<button class="btn-primary" id="zolik-save-round">Uložit kolo</button></div>`;
-      html += `<div style="margin:0 18px;"><button class="btn-secondary btn-danger" id="zolik-delete-btn">Smazat hru</button></div>`;
     }
 
+    if(roundsPlayed>0){
+      html += `<div style="margin:0 18px 14px;">
+        <select class="sortsel" id="zolik-edit-round-select" style="width:100%;">
+          <option value="">Upravit odehrané kolo…</option>
+          ${rounds.map((r,i)=>`<option value="${i}" ${editIdx===i?"selected":""}>Kolo ${i+1}</option>`).join("")}
+        </select>
+      </div>`;
+    }
+
+    const showNewRoundBox = !finished && editIdx===null;
+    const showEditBox = editIdx!=null;
+
+    if(showNewRoundBox || showEditBox){
+      const roundIdxForDealer = showEditBox ? editIdx : roundsPlayed;
+      const dealerIdx = ((game.dealerStartIndex||0) + roundIdxForDealer) % players.length;
+      const existingRound = showEditBox ? rounds[editIdx] : null;
+      html += `<div class="dealer-tag">🔀 Rozdává: <b>${escapeHtml(players[dealerIdx])}</b></div>`;
+      html += `<div class="round-box"><h4>${showEditBox ? `Upravit kolo ${editIdx+1}` : `Kolo ${roundsPlayed+1} / 10`}</h4>`;
+      players.forEach((p,idx)=>{
+        const bank = jokers[p]||0;
+        const existingScore = existingRound && existingRound.scores ? (existingRound.scores[p]||0) : 0;
+        const wasAwarded = existingRound && (existingRound.jokersAwarded||[]).includes(p);
+        html += `<div class="round-entry-row">
+          <label for="rs-${idx}">${escapeHtml(p)}${bank?`<span class="joker-badge">🃏×${bank}</span>`:""}</label>
+          <input type="number" id="rs-${idx}" min="0" value="${existingScore}">
+          <span class="round-joker-check" id="rj-wrap-${idx}"><input type="checkbox" id="rj-${idx}" ${wasAwarded?"checked":""}> 🃏 do dalšího kola</span>
+        </div>`;
+      });
+      html += `<button class="btn-primary" id="zolik-save-round">${showEditBox ? "Uložit úpravu kola" : "Uložit kolo"}</button>`;
+      if(showEditBox) html += `<button class="btn-secondary" id="zolik-cancel-edit-round">Zrušit úpravu</button>`;
+      html += `</div>`;
+    }
+
+    html += `<div style="margin:0 18px;"><button class="btn-secondary btn-danger" id="zolik-delete-btn">Smazat hru</button></div>`;
+
     wrap.innerHTML = html;
-    document.getElementById("zolik-back-btn").addEventListener("click", renderZolikList);
-    const delBtn = document.getElementById("zolik-delete-btn");
-    if(delBtn) delBtn.addEventListener("click", async ()=>{
+    document.getElementById("zolik-back-btn").addEventListener("click", ()=>{ zolikEditRoundIndex=null; renderZolikList(); });
+    document.getElementById("zolik-delete-btn").addEventListener("click", async ()=>{
       if(!confirm("Opravdu smazat celou hru?")) return;
       try{
         await window.fb.deleteDoc(window.fb.doc(window.fb.db,"zolik_games",game.id));
+        zolikEditRoundIndex = null;
         renderZolikList();
       }catch(err){ console.error(err); alert("Smazání se nepovedlo."); }
     });
 
-    if(!finished){
+    const roundSelect = document.getElementById("zolik-edit-round-select");
+    if(roundSelect){
+      roundSelect.addEventListener("change", ()=>{
+        const v = roundSelect.value;
+        zolikEditRoundIndex = v==="" ? null : parseInt(v,10);
+        renderZolikDetail();
+      });
+    }
+    const cancelEditBtn = document.getElementById("zolik-cancel-edit-round");
+    if(cancelEditBtn) cancelEditBtn.addEventListener("click", ()=>{ zolikEditRoundIndex=null; renderZolikDetail(); });
+
+    if(showNewRoundBox || showEditBox){
       const inputs = players.map((p,idx)=> document.getElementById(`rs-${idx}`));
       function updateJokerVisibility(){
         const vals = inputs.map(inp=> Number(inp.value)||0);
@@ -1304,9 +1510,10 @@
           const wrapEl = document.getElementById(`rj-wrap-${idx}`);
           const cb = document.getElementById(`rj-${idx}`);
           const bank = jokers[p]||0;
-          const eligible = vals[idx]===min && bank<4;
+          // In edit mode, allow toggling regardless of live bank cap (final cap enforced on save via replay)
+          const eligible = vals[idx]===min && (showEditBox || bank<4);
           wrapEl.classList.toggle("show", eligible);
-          if(!eligible) cb.checked = false;
+          if(!eligible && !showEditBox) cb.checked = false;
         });
       }
       inputs.forEach(inp=> inp.addEventListener("input", updateJokerVisibility));
@@ -1316,21 +1523,26 @@
         const scores = {};
         players.forEach((p,idx)=>{ scores[p] = Number(document.getElementById(`rs-${idx}`).value)||0; });
         const jokersAwarded = [];
-        const newJokers = {...jokers};
         players.forEach((p,idx)=>{
           const wrapEl = document.getElementById(`rj-wrap-${idx}`);
           const cb = document.getElementById(`rj-${idx}`);
           if(wrapEl.classList.contains("show") && cb.checked){
-            newJokers[p] = Math.min(4, (newJokers[p]||0)+1);
             jokersAwarded.push(p);
           }
         });
-        const newRounds = [...rounds, { scores, jokersAwarded }];
-        const willFinish = newRounds.length >= 10;
+        let newRounds;
+        if(showEditBox){
+          newRounds = rounds.map((r,i)=> i===editIdx ? { scores, jokersAwarded } : r);
+        } else {
+          newRounds = [...rounds, { scores, jokersAwarded }];
+        }
+        const newJokers = computeJokersFromRounds(players, newRounds);
+        const willFinish = showEditBox ? finished : newRounds.length >= 10;
         try{
           await window.fb.updateDoc(window.fb.doc(window.fb.db,"zolik_games",game.id), {
             rounds: newRounds, jokers: newJokers, finished: willFinish
           });
+          zolikEditRoundIndex = null;
         }catch(err){ console.error(err); alert("Uložení kola se nepovedlo."); }
       });
     }
@@ -1380,7 +1592,7 @@
 
   /* ---------------- Export / Import ---------------- */
   document.getElementById("btn-export").addEventListener("click", ()=>{
-    const payload = { camps, diary: diaryEntries, zolik_games: zolikGames };
+    const payload = { camps, diary: diaryEntries, diary_folders: diaryFolders, zolik_games: zolikGames };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1389,7 +1601,6 @@
     a.click();
     URL.revokeObjectURL(url);
   });
-  document.getElementById("btn-import").addEventListener("click", ()=> document.getElementById("import-input").click());
   document.getElementById("import-input").addEventListener("change", (e)=>{
     const file = e.target.files[0];
     if(!file) return;
@@ -1399,9 +1610,10 @@
         const data = JSON.parse(ev.target.result);
         const campsIn = Array.isArray(data) ? data : (data.camps||[]);
         const diaryIn = Array.isArray(data) ? [] : (data.diary||[]);
+        const foldersIn = Array.isArray(data) ? [] : (data.diary_folders||[]);
         const gamesIn = Array.isArray(data) ? [] : (data.zolik_games||[]);
         if(!campsCollection){ alert("Appka ještě není připojená k databázi."); return; }
-        const total = campsIn.length + diaryIn.length + gamesIn.length;
+        const total = campsIn.length + diaryIn.length + foldersIn.length + gamesIn.length;
         if(!confirm(`Naimportovat ${total} položek do sdílené databáze? Může to vytvořit duplicity.`)) return;
         for(const item of campsIn){
           await window.fb.addDoc(campsCollection, {
@@ -1413,10 +1625,16 @@
             order: item.order || Date.now(), createdAt: item.createdAt || item.dateAdded || Date.now()
           });
         }
+        for(const item of foldersIn){
+          await window.fb.addDoc(diaryFoldersCollection, {
+            name: item.name || "Složka", createdAt: item.createdAt || Date.now()
+          });
+        }
         for(const item of diaryIn){
           await window.fb.addDoc(diaryCollection, {
             title: item.title || "Bez názvu", tripDate: item.tripDate || "",
-            text: item.text || "", createdAt: item.createdAt || Date.now()
+            text: item.text || "", folderId: item.folderId || null,
+            createdAt: item.createdAt || Date.now()
           });
         }
         for(const item of gamesIn){
@@ -1426,7 +1644,6 @@
             createdAt: item.createdAt || Date.now()
           });
         }
-        closeSheets();
         alert("Import hotov.");
       }catch(err){
         console.error(err);
@@ -1441,6 +1658,7 @@
     setSyncStatus("connecting", "Připojování…");
     campsCollection = window.fb.collection(window.fb.db, "camps");
     diaryCollection = window.fb.collection(window.fb.db, "diary");
+    diaryFoldersCollection = window.fb.collection(window.fb.db, "diary_folders");
     zolikCollection = window.fb.collection(window.fb.db, "zolik_games");
 
     window.fb.onSnapshot(window.fb.query(campsCollection, window.fb.orderBy("order","asc")), (snap)=>{
@@ -1452,8 +1670,16 @@
 
     window.fb.onSnapshot(window.fb.query(diaryCollection, window.fb.orderBy("createdAt","desc")), (snap)=>{
       diaryEntries = snap.docs.map(d=>({id:d.id, ...d.data()}));
-      if(currentView==="denik") renderDiaryList();
+      if(currentView==="denik"){
+        if(currentDiaryFolderId===null) renderDiaryFolders();
+        else renderDiaryEntries();
+      }
     }, (err)=> console.error("diary sync error:", err));
+
+    window.fb.onSnapshot(window.fb.query(diaryFoldersCollection, window.fb.orderBy("createdAt","asc")), (snap)=>{
+      diaryFolders = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      if(currentView==="denik" && currentDiaryFolderId===null) renderDiaryFolders();
+    }, (err)=> console.error("diary folders sync error:", err));
 
     window.fb.onSnapshot(window.fb.query(zolikCollection, window.fb.orderBy("createdAt","desc")), (snap)=>{
       zolikGames = snap.docs.map(d=>({id:d.id, ...d.data()}));
