@@ -379,7 +379,14 @@
       </div>
       <div id="denik-entries-wrap" style="display:none;">
         <div class="zolik-detail-header"><button class="zolik-back" id="denik-back-btn">‹ Zpět na složky</button></div>
-        <div class="list-toolbar"><h2 id="denik-folder-title">Nezařazené</h2></div>
+        <div class="list-toolbar">
+          <h2 id="denik-folder-title">Nezařazené</h2>
+          <select class="sortsel" id="sort-denik">
+            <option value="tripdate">Podle data výletu</option>
+            <option value="name">Abecedně</option>
+            <option value="added">Nejnovější přidané</option>
+          </select>
+        </div>
         <div id="list-denik-entries" class="card-list"></div>
       </div>
     </div>
@@ -1181,6 +1188,7 @@
     updateFab();
   }
   document.getElementById("denik-back-btn").addEventListener("click", showDiaryFolderList);
+  document.getElementById("sort-denik").addEventListener("change", renderDiaryEntries);
 
   function entriesInFolder(folderId){
     return diaryEntries.filter(d=> folderId==="unfiled" ? !d.folderId : d.folderId===folderId);
@@ -1235,7 +1243,12 @@
 
   function renderDiaryEntries(){
     const container = document.getElementById("list-denik-entries");
-    const items = entriesInFolder(currentDiaryFolderId).sort((a,b)=> (b.tripDate||"").localeCompare(a.tripDate||"") || (b.createdAt||0)-(a.createdAt||0));
+    const mode = document.getElementById("sort-denik").value;
+    const items = entriesInFolder(currentDiaryFolderId).sort((a,b)=>{
+      if(mode==="name") return (a.title||"").localeCompare(b.title||"", "cs");
+      if(mode==="added") return (b.createdAt||0)-(a.createdAt||0);
+      return (b.tripDate||"").localeCompare(a.tripDate||"") || (b.createdAt||0)-(a.createdAt||0);
+    });
     container.innerHTML = "";
     if(!items.length){
       container.innerHTML = `<div class="empty-state"><span class="icon">📖</span>Zatím žádný zápis v téhle složce. Přidej první přes ➕.</div>`;
