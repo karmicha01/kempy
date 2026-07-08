@@ -241,7 +241,7 @@
 
   label.field{ display:block; margin-bottom:14px; }
   label.field span{ display:block; font-size:11.5px; color: var(--moss); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;}
-  input[type=text], input[type=number], input[type=date], textarea{
+  input[type=text], input[type=number], input[type=date], textarea, select#f-country{
     width:100%; background: var(--bg-card); border:1px solid var(--line); color: var(--cream);
     border-radius:10px; padding:10px 12px; font-family: var(--font-body); font-size:14.5px;
   }
@@ -365,6 +365,9 @@
         <button data-tab="visited" class="active">Navštívené</button>
         <button data-tab="wishlist">Chci navštívit</button>
       </div>
+      <div style="padding:10px 18px 0;">
+        <select class="sortsel" id="filter-kempy-country" style="width:100%;"></select>
+      </div>
       <div class="list-toolbar">
         <h2 id="kempy-title">Navštívené</h2>
         <select class="sortsel" id="sort-kempy"></select>
@@ -431,6 +434,10 @@
 
     <label class="field"><span>Název</span>
       <input type="text" id="f-name" placeholder="např. Kemp Bítov">
+    </label>
+
+    <label class="field"><span>Země (nepovinné)</span>
+      <select id="f-country"></select>
     </label>
 
     <label class="field"><span>Vyhledat na mapě</span>
@@ -599,6 +606,42 @@
   const MAPY_API_KEY = "AJemwjtCN17aArycCDHVb6R4qKHOjAg0TmBus-DTP5c";
   const needsMapySetup = MAPY_API_KEY.startsWith("VLOZ_");
 
+  const EUROPEAN_COUNTRIES = [
+    {code:"AL", name:"Albánie", flag:"🇦🇱"}, {code:"AD", name:"Andorra", flag:"🇦🇩"},
+    {code:"AT", name:"Rakousko", flag:"🇦🇹"}, {code:"BY", name:"Bělorusko", flag:"🇧🇾"},
+    {code:"BE", name:"Belgie", flag:"🇧🇪"}, {code:"BA", name:"Bosna a Hercegovina", flag:"🇧🇦"},
+    {code:"BG", name:"Bulharsko", flag:"🇧🇬"}, {code:"HR", name:"Chorvatsko", flag:"🇭🇷"},
+    {code:"CY", name:"Kypr", flag:"🇨🇾"}, {code:"CZ", name:"Česko", flag:"🇨🇿"},
+    {code:"DK", name:"Dánsko", flag:"🇩🇰"}, {code:"EE", name:"Estonsko", flag:"🇪🇪"},
+    {code:"FI", name:"Finsko", flag:"🇫🇮"}, {code:"FR", name:"Francie", flag:"🇫🇷"},
+    {code:"DE", name:"Německo", flag:"🇩🇪"}, {code:"GR", name:"Řecko", flag:"🇬🇷"},
+    {code:"HU", name:"Maďarsko", flag:"🇭🇺"}, {code:"IS", name:"Island", flag:"🇮🇸"},
+    {code:"IE", name:"Irsko", flag:"🇮🇪"}, {code:"IT", name:"Itálie", flag:"🇮🇹"},
+    {code:"XK", name:"Kosovo", flag:"🇽🇰"}, {code:"LV", name:"Lotyšsko", flag:"🇱🇻"},
+    {code:"LI", name:"Lichtenštejnsko", flag:"🇱🇮"}, {code:"LT", name:"Litva", flag:"🇱🇹"},
+    {code:"LU", name:"Lucembursko", flag:"🇱🇺"}, {code:"MT", name:"Malta", flag:"🇲🇹"},
+    {code:"MD", name:"Moldavsko", flag:"🇲🇩"}, {code:"MC", name:"Monako", flag:"🇲🇨"},
+    {code:"ME", name:"Černá Hora", flag:"🇲🇪"}, {code:"NL", name:"Nizozemsko", flag:"🇳🇱"},
+    {code:"MK", name:"Severní Makedonie", flag:"🇲🇰"}, {code:"NO", name:"Norsko", flag:"🇳🇴"},
+    {code:"PL", name:"Polsko", flag:"🇵🇱"}, {code:"PT", name:"Portugalsko", flag:"🇵🇹"},
+    {code:"RO", name:"Rumunsko", flag:"🇷🇴"}, {code:"RU", name:"Rusko", flag:"🇷🇺"},
+    {code:"SM", name:"San Marino", flag:"🇸🇲"}, {code:"RS", name:"Srbsko", flag:"🇷🇸"},
+    {code:"SK", name:"Slovensko", flag:"🇸🇰"}, {code:"SI", name:"Slovinsko", flag:"🇸🇮"},
+    {code:"ES", name:"Španělsko", flag:"🇪🇸"}, {code:"SE", name:"Švédsko", flag:"🇸🇪"},
+    {code:"CH", name:"Švýcarsko", flag:"🇨🇭"}, {code:"UA", name:"Ukrajina", flag:"🇺🇦"},
+    {code:"GB", name:"Velká Británie", flag:"🇬🇧"}, {code:"VA", name:"Vatikán", flag:"🇻🇦"}
+  ].sort((a,b)=> a.name.localeCompare(b.name, "cs"));
+  const COUNTRY_BY_CODE = Object.fromEntries(EUROPEAN_COUNTRIES.map(c=>[c.code,c]));
+  function populateCountrySelect(){
+    const sel = document.getElementById("f-country");
+    sel.innerHTML = `<option value="">Nevybráno</option>` +
+      EUROPEAN_COUNTRIES.map(c=>`<option value="${c.code}">${c.flag} ${c.name}</option>`).join("");
+  }
+  function countryLabel(code){
+    const c = COUNTRY_BY_CODE[code];
+    return c ? `${c.flag} ${c.name}` : "";
+  }
+
   let camps = [];
   let diaryEntries = [];
   let diaryFolders = [];
@@ -703,10 +746,11 @@
     withLoc.forEach(c=>{
       const marker = L.marker([c.lat,c.lng], {icon: flameIcon(c.visited?'ember':'moss')}).addTo(mainMap);
       const flames = c.visited ? "🔥".repeat(c.rating||0) + "🖤".repeat(5-(c.rating||0)) : "na seznamu přání";
+      const countryStr = countryLabel(c.country);
       let links = "";
       if(c.googleMapsUrl) links += `<a href="${c.googleMapsUrl}" target="_blank" rel="noopener">Google Maps ↗</a>`;
       if(c.mapyUrl) links += `<a href="${c.mapyUrl}" target="_blank" rel="noopener">Mapy.com ↗</a>`;
-      marker.bindPopup(`<div class="popup-title">${escapeHtml(c.name||"Bez názvu")}</div><div class="popup-flames">${flames}</div>${links?`<div class="popup-links">${links}</div>`:""}`);
+      marker.bindPopup(`<div class="popup-title">${escapeHtml(c.name||"Bez názvu")}</div>${countryStr?`<div class="popup-flames">${countryStr}</div>`:""}<div class="popup-flames">${flames}</div>${links?`<div class="popup-links">${links}</div>`:""}`);
       marker.on("click", ()=> marker.openPopup());
       marker.on("popupopen", ()=>{
         const el = marker.getPopup().getElement();
@@ -735,26 +779,46 @@
   function setKempySortOptions(){
     const sel = document.getElementById("sort-kempy");
     if(currentKempyTab==="visited"){
-      sel.innerHTML = `<option value="rating">Nejlépe hodnocené</option><option value="name">Abecedně</option><option value="date">Nejnovější</option>`;
+      sel.innerHTML = `<option value="rating">Nejlépe hodnocené</option><option value="name">Abecedně</option><option value="date">Nejnovější</option><option value="country">Podle země</option>`;
     } else {
-      sel.innerHTML = `<option value="priority">Priorita</option><option value="name">Abecedně</option><option value="date">Nejnovější přidané</option>`;
+      sel.innerHTML = `<option value="priority">Priorita</option><option value="name">Abecedně</option><option value="date">Nejnovější přidané</option><option value="country">Podle země</option>`;
     }
   }
   document.getElementById("sort-kempy").addEventListener("change", renderKempyList);
   setKempySortOptions();
 
+  let currentCountryFilter = "";
+  function populateKempyCountryFilter(){
+    const sel = document.getElementById("filter-kempy-country");
+    const prev = currentCountryFilter;
+    const present = new Set(camps.map(c=>c.country).filter(Boolean));
+    const options = EUROPEAN_COUNTRIES.filter(c=>present.has(c.code));
+    sel.innerHTML = `<option value="">Všechny země</option>` +
+      options.map(c=>`<option value="${c.code}">${c.flag} ${c.name}</option>`).join("");
+    if(present.has(prev)) sel.value = prev; else { sel.value=""; currentCountryFilter=""; }
+  }
+  document.getElementById("filter-kempy-country").addEventListener("change", (e)=>{
+    currentCountryFilter = e.target.value;
+    renderKempyList();
+  });
+
   function renderKempyList(){
     const container = document.getElementById("list-kempy");
     let items = camps.filter(c => currentKempyTab==="visited" ? c.visited : !c.visited);
+    if(currentCountryFilter) items = items.filter(c => c.country === currentCountryFilter);
     const mode = document.getElementById("sort-kempy").value;
     if(mode==="rating") items.sort((a,b)=> (b.rating||0)-(a.rating||0));
     else if(mode==="name") items.sort((a,b)=> (a.name||"").localeCompare(b.name||"", "cs"));
     else if(mode==="date") items.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
     else if(mode==="priority") items.sort((a,b)=> (a.order||0)-(b.order||0));
+    else if(mode==="country") items.sort((a,b)=> countryLabel(a.country).localeCompare(countryLabel(b.country), "cs") || (a.name||"").localeCompare(b.name||"", "cs"));
 
     container.innerHTML = "";
     if(!items.length){
-      container.innerHTML = `<div class="empty-state"><span class="icon">${currentKempyTab==="visited"?"🏕️":"⭐"}</span>
+      const filterActive = !!currentCountryFilter;
+      container.innerHTML = filterActive
+        ? `<div class="empty-state"><span class="icon">${currentKempyTab==="visited"?"🏕️":"⭐"}</span>Žádný kemp v téhle zemi neodpovídá filtru.</div>`
+        : `<div class="empty-state"><span class="icon">${currentKempyTab==="visited"?"🏕️":"⭐"}</span>
         ${currentKempyTab==="visited" ? "Zatím žádný navštívený kemp. Přidej první přes ➕." : "Seznam přání je prázdný. Přidej kemp, který chceš navštívit."}</div>`;
       return;
     }
@@ -765,6 +829,7 @@
       const thumbStyle = firstPhoto ? `style="background-image:url('${firstPhoto}')"` : "";
       const flames = c.visited ? "🔥".repeat(c.rating||0) : "";
       const dateStr = c.createdAt ? new Date(c.createdAt).toLocaleDateString("cs-CZ") : "";
+      const countryStr = countryLabel(c.country);
       let links = "";
       if(c.googleMapsUrl) links += `<a class="link-chip" href="${c.googleMapsUrl}" target="_blank" rel="noopener">Google Maps ↗</a>`;
       if(c.mapyUrl) links += `<a class="link-chip" href="${c.mapyUrl}" target="_blank" rel="noopener">Mapy.com ↗</a>`;
@@ -773,7 +838,7 @@
         <div class="info">
           <div class="row1"><h3>${escapeHtml(c.name||"Bez názvu")}</h3><span class="flames">${flames}</span></div>
           ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : ""}
-          <div class="meta">${dateStr}</div>
+          <div class="meta">${[countryStr, dateStr].filter(Boolean).join(" · ")}</div>
           ${links ? `<div class="link-chip-row">${links}</div>` : ""}
         </div>`;
       card.querySelector(".info").addEventListener("click", (e)=>{
@@ -853,6 +918,7 @@
     document.getElementById("form-title").textContent = c ? "Upravit kemp" : "Přidat kemp";
     document.getElementById("edit-id").value = id || "";
     document.getElementById("f-name").value = c ? (c.name||"") : "";
+    document.getElementById("f-country").value = c ? (c.country||"") : "";
     document.getElementById("f-note").value = c ? (c.note||"") : "";
     document.getElementById("f-lat").value = c && c.lat!=null ? c.lat : "";
     document.getElementById("f-lng").value = c && c.lng!=null ? c.lng : "";
@@ -1108,6 +1174,7 @@
     const lat = parseFloat(document.getElementById("f-lat").value);
     const lng = parseFloat(document.getElementById("f-lng").value);
     const note = document.getElementById("f-note").value.trim();
+    const country = document.getElementById("f-country").value;
     const gmaps = document.getElementById("f-gmaps").value.trim();
     const mapyurl = document.getElementById("f-mapyurl").value.trim();
     const id = document.getElementById("edit-id").value;
@@ -1117,7 +1184,7 @@
     try{
       let campId = id;
       const baseData = {
-        name, note,
+        name, note, country: country || null,
         lat: isNaN(lat)?null:lat, lng: isNaN(lng)?null:lng,
         googleMapsUrl: gmaps || null, mapyUrl: mapyurl || null,
         visited: visitedState, rating: visitedState ? ratingState : 0
@@ -1661,7 +1728,7 @@
           await window.fb.addDoc(campsCollection, {
             name: item.name || "Bez názvu", note: item.note || "",
             lat: item.lat ?? null, lng: item.lng ?? null,
-            googleMapsUrl: item.googleMapsUrl || null, mapyUrl: item.mapyUrl || null,
+            googleMapsUrl: item.googleMapsUrl || null, mapyUrl: item.mapyUrl || null, country: item.country || null,
             visited: !!item.visited, rating: item.rating || 0,
             photoUrls: item.photoUrls || item.photos || [],
             order: item.order || Date.now(), createdAt: item.createdAt || item.dateAdded || Date.now()
@@ -1705,6 +1772,7 @@
 
     window.fb.onSnapshot(window.fb.query(campsCollection, window.fb.orderBy("order","asc")), (snap)=>{
       camps = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      populateKempyCountryFilter();
       renderMapMarkers();
       if(currentView==="kempy") renderKempyList();
       setSyncStatus("ok", "Synchronizováno");
@@ -1736,6 +1804,8 @@
 
   /* ---------------- Init ---------------- */
   checkSetupBanner();
+  populateCountrySelect();
+  populateKempyCountryFilter();
   initMainMap();
   switchView("mapa");
 })();
