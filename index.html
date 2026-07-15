@@ -241,7 +241,7 @@
 
   label.field, div.field{ display:block; margin-bottom:14px; }
   label.field span, div.field span{ display:block; font-size:11.5px; color: var(--moss); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;}
-  input[type=text], input[type=number], input[type=date], textarea, select#f-country{
+  input[type=text], input[type=number], input[type=date], input[type=password], textarea, select#f-country{
     width:100%; background: var(--bg-card); border:1px solid var(--line); color: var(--cream);
     border-radius:10px; padding:10px 12px; font-family: var(--font-body); font-size:14.5px;
   }
@@ -419,6 +419,8 @@
   <button class="drawer-item" data-view="zolik"><span class="ic">🃏</span> Žolík</button>
   <button class="drawer-item" data-view="checklist"><span class="ic">✅</span> Odjezdový checklist</button>
   <div class="drawer-sep"></div>
+  <button class="drawer-item" id="btn-auth"><span class="ic">🔐</span> Přihlásit se</button>
+  <div class="drawer-sep"></div>
   <button class="drawer-item" id="btn-export"><span class="ic">⬇️</span> Exportovat zálohu</button>
   <button class="drawer-item" id="btn-import"><span class="ic">⬆️</span> Importovat ze zálohy</button>
 </nav>
@@ -545,6 +547,23 @@
   </div>
 </div>
 
+<div class="sheet" id="sheet-login">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h2>Přihlášení</h2>
+    <p style="font-size:13px;color:var(--cream-dim);margin-top:-6px;">Prohlížení je volné pro každého s odkazem. Přidávání a úpravy vyžadují přihlášení.</p>
+    <label class="field"><span>E-mail</span>
+      <input type="text" id="login-email" autocomplete="username" placeholder="tvuj@email.cz">
+    </label>
+    <label class="field"><span>Heslo</span>
+      <input type="password" id="login-password" autocomplete="current-password" placeholder="Heslo">
+    </label>
+    <div id="login-error" style="color:var(--ember-deep); font-size:12.5px; margin:-6px 0 10px; display:none;"></div>
+    <button class="btn-primary" id="btn-login-submit">Přihlásit se</button>
+    <button class="btn-secondary" id="btn-login-cancel">Zrušit</button>
+  </div>
+</div>
+
 <div id="lightbox"><img id="lightbox-img" src=""></div>
 </div>
 <input type="file" id="import-input" accept="application/json" style="display:none">
@@ -559,7 +578,10 @@
     getFirestore, collection, addDoc, updateDoc, deleteDoc, doc,
     onSnapshot, query, orderBy
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import {
+    getAuth, signInAnonymously, onAuthStateChanged,
+    signInWithEmailAndPassword, signOut
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
   import { getStorage, ref, uploadString, getDownloadURL, listAll, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
   const firebaseConfig = {
@@ -581,11 +603,23 @@
   window.fb = {
     db, auth, storage, config: firebaseConfig, needsSetup: needsFirebaseSetup,
     collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy,
-    ref, uploadString, getDownloadURL, listAll, deleteObject
+    ref, uploadString, getDownloadURL, listAll, deleteObject,
+    signInWithEmailAndPassword, signOut
   };
 
   onAuthStateChanged(auth, (user) => {
-    if (user) window.dispatchEvent(new CustomEvent("fb-ready"));
+    if (user) {
+      window.dispatchEvent(new CustomEvent("fb-ready", { detail: {
+        isEditor: !user.isAnonymous,
+        email: user.isAnonymous ? null : user.email
+      }}));
+    } else {
+      // Signed out (e.g. after logout) -> fall back to anonymous so reading still works
+      signInAnonymously(auth).catch((err) => {
+        console.error("Anonymní přihlášení do Firebase selhalo:", err);
+        window.dispatchEvent(new CustomEvent("fb-error", { detail: err }));
+      });
+    }
   });
 
   if (!needsFirebaseSetup) {
@@ -651,6 +685,8 @@
   let currentView = "mapa";
   let currentKempyTab = "visited";
   let currentGameId = null;
+  let isEditor = false;
+  let currentUserEmail = null;
   let pendingPhotos = [];
   let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null;
   let tileErrorShown = false;
@@ -698,6 +734,7 @@
     fab.textContent = "➕";
   }
   document.getElementById("fab-add").addEventListener("click", ()=>{
+    if(!requireEditor()) return;
     if(currentView==="mapa" || currentView==="kempy") openForm(null);
     else if(currentView==="denik"){
       if(currentDiaryFolderId===null) createDiaryFolder();
@@ -862,6 +899,7 @@
     });
   }
   async function moveInArray(id, dir){
+    if(!requireEditor()) return;
     const wishlist = camps.filter(c=>!c.visited).sort((a,b)=>(a.order||0)-(b.order||0));
     const idx = wishlist.findIndex(c=>c.id===id);
     const swapWith = dir==="up" ? idx-1 : idx+1;
@@ -879,7 +917,8 @@
   const sheetDiary = document.getElementById("sheet-diary");
   const sheetDiaryView = document.getElementById("sheet-diary-view");
   const sheetZolikNew = document.getElementById("sheet-zolik-new");
-  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew];
+  const sheetLogin = document.getElementById("sheet-login");
+  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew, sheetLogin];
 
   function openSheet(sheet){
     backdrop.classList.add("active");
@@ -907,7 +946,59 @@
     });
   });
   document.getElementById("btn-export").addEventListener("click", closeDrawer);
-  document.getElementById("btn-import").addEventListener("click", ()=>{ closeDrawer(); document.getElementById("import-input").click(); });
+  document.getElementById("btn-import").addEventListener("click", ()=>{ closeDrawer(); if(!requireEditor()) return; document.getElementById("import-input").click(); });
+
+  /* ---------------- Auth (edit permissions) ---------------- */
+  function updateAuthUI(){
+    const btn = document.getElementById("btn-auth");
+    if(isEditor){
+      btn.innerHTML = `<span class="ic">🔓</span> Odhlásit se (${escapeHtml(currentUserEmail||"")})`;
+    } else {
+      btn.innerHTML = `<span class="ic">🔐</span> Přihlásit se`;
+    }
+  }
+  function requireEditor(){
+    if(!isEditor){
+      closeDrawer();
+      openSheet(sheetLogin);
+      document.getElementById("login-error").style.display = "none";
+      return false;
+    }
+    return true;
+  }
+  document.getElementById("btn-auth").addEventListener("click", async ()=>{
+    if(isEditor){
+      if(!confirm("Odhlásit se?")) return;
+      closeDrawer();
+      try{ await window.fb.signOut(window.fb.auth); }catch(err){ console.error(err); }
+    } else {
+      closeDrawer();
+      document.getElementById("login-email").value = "";
+      document.getElementById("login-password").value = "";
+      document.getElementById("login-error").style.display = "none";
+      openSheet(sheetLogin);
+    }
+  });
+  document.getElementById("btn-login-cancel").addEventListener("click", closeSheets);
+  document.getElementById("btn-login-submit").addEventListener("click", async ()=>{
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+    const errEl = document.getElementById("login-error");
+    errEl.style.display = "none";
+    if(!email || !password){ errEl.textContent = "Vyplň e-mail i heslo."; errEl.style.display = "block"; return; }
+    const btn = document.getElementById("btn-login-submit");
+    btn.disabled = true; btn.textContent = "Přihlašuji…";
+    try{
+      await window.fb.signInWithEmailAndPassword(window.fb.auth, email, password);
+      closeSheets();
+    }catch(err){
+      console.error(err);
+      errEl.textContent = "Přihlášení se nepovedlo — zkontroluj e-mail a heslo.";
+      errEl.style.display = "block";
+    }finally{
+      btn.disabled = false; btn.textContent = "Přihlásit se";
+    }
+  });
 
   let visitedState = true;
   let ratingState = 0;
@@ -1167,6 +1258,7 @@
   /* save / delete camp (Firestore + Storage) */
   const btnSave = document.getElementById("btn-save");
   btnSave.addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
     if(!campsCollection){ alert("Appka ještě není připojená k databázi. Zkontroluj Firebase nastavení a připojení k internetu."); return; }
     const name = document.getElementById("f-name").value.trim();
     if(!name){ alert("Zadej název kempu."); return; }
@@ -1219,6 +1311,7 @@
   });
 
   document.getElementById("btn-delete").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
     const id = document.getElementById("edit-id").value;
     if(!id) return;
     if(!confirm("Opravdu smazat tento kemp?")) return;
@@ -1281,6 +1374,7 @@
       delBtn.textContent = "🗑️ Smazat složku";
       delBtn.addEventListener("click", async (e)=>{
         e.stopPropagation();
+        if(!requireEditor()) return;
         if(count>0){ alert("Složka obsahuje zápisy — nejdřív je přesuň nebo smaž, pak lze složku odstranit."); return; }
         if(!confirm(`Smazat prázdnou složku "${f.name}"?`)) return;
         try{ await window.fb.deleteDoc(window.fb.doc(window.fb.db,"diary_folders",f.id)); }
@@ -1299,6 +1393,7 @@
   }
 
   async function createDiaryFolder(){
+    if(!requireEditor()) return;
     if(!diaryFoldersCollection){ alert("Appka ještě není připojená k databázi."); return; }
     const name = prompt("Název složky (např. název dovolené):");
     if(!name || !name.trim()) return;
@@ -1429,6 +1524,7 @@
   });
 
   document.getElementById("btn-diary-save").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
     if(!diaryCollection){ alert("Appka ještě není připojená k databázi."); return; }
     const title = document.getElementById("d-title").value.trim();
     if(!title){ alert("Zadej název zápisu."); return; }
@@ -1449,6 +1545,7 @@
     }
   });
   document.getElementById("btn-diary-delete").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
     const id = document.getElementById("diary-edit-id").value;
     if(!id) return;
     if(!confirm("Opravdu smazat tento zápis?")) return;
@@ -1590,6 +1687,7 @@
     wrap.innerHTML = html;
     document.getElementById("zolik-back-btn").addEventListener("click", ()=>{ zolikEditRoundIndex=null; renderZolikList(); });
     document.getElementById("zolik-delete-btn").addEventListener("click", async ()=>{
+      if(!requireEditor()) return;
       if(!confirm("Opravdu smazat celou hru?")) return;
       try{
         await window.fb.deleteDoc(window.fb.doc(window.fb.db,"zolik_games",game.id));
@@ -1628,6 +1726,7 @@
       updateJokerVisibility();
 
       document.getElementById("zolik-save-round").addEventListener("click", async ()=>{
+        if(!requireEditor()) return;
         const scores = {};
         players.forEach((p,idx)=>{ scores[p] = Number(document.getElementById(`rs-${idx}`).value)||0; });
         const jokersAwarded = [];
@@ -1680,6 +1779,7 @@
     document.getElementById("zolik-players-list").appendChild(zolikPlayerRow());
   });
   document.getElementById("btn-zolik-start").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
     if(!zolikCollection){ alert("Appka ještě není připojená k databázi."); return; }
     const names = [...document.querySelectorAll("#zolik-players-list input")]
       .map(i=>i.value.trim()).filter(Boolean);
@@ -1710,6 +1810,7 @@
     URL.revokeObjectURL(url);
   });
   document.getElementById("import-input").addEventListener("change", (e)=>{
+    if(!requireEditor()) return;
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
@@ -1798,7 +1899,15 @@
       }
     }, (err)=> console.error("zolik sync error:", err));
   }
-  window.addEventListener("fb-ready", ()=>{ checkSetupBanner(); startSync(); });
+  let syncStarted = false;
+  window.addEventListener("fb-ready", (e)=>{
+    checkSetupBanner();
+    isEditor = !!(e.detail && e.detail.isEditor);
+    currentUserEmail = e.detail ? e.detail.email : null;
+    updateAuthUI();
+    updateFab();
+    if(!syncStarted){ syncStarted = true; startSync(); }
+  });
   window.addEventListener("fb-error", ()=>{ checkSetupBanner(); setSyncStatus("error", "Nepřipojeno — zkontroluj Firebase nastavení"); });
 
   /* ---------------- Init ---------------- */
