@@ -339,6 +339,22 @@
   .zolik-players-row button{ background:none; border:none; color: var(--ember-deep); font-size:18px; }
 
   ::-webkit-scrollbar{ width:0; height:0; }
+  /* ---------- Checklist ---------- */
+  .checklist-category{
+    padding:16px 18px 6px; font-family: var(--font-display); font-size:15.5px;
+    color: var(--ember-soft); font-weight:650;
+  }
+  .checklist-row{
+    display:flex; align-items:center; gap:12px; padding:10px 18px;
+    border-bottom:1px solid var(--line);
+  }
+  .checklist-row input[type=checkbox]{
+    width:20px; height:20px; accent-color: var(--ember); flex-shrink:0;
+  }
+  .checklist-row .txt{ flex:1; font-size:14px; }
+  .checklist-row .txt.checked{ text-decoration: line-through; color: var(--cream-dim); }
+  .checklist-row .rm{ background:none; border:none; color: var(--ember-deep); font-size:15px; padding:4px 6px; flex-shrink:0; }
+
   /* ---------- Desktop: full-screen sidebar layout (kept last so it wins the cascade) ---------- */
   @media (min-width: 1100px){
     body{ overflow:hidden; }
@@ -427,8 +443,12 @@
     </div>
 
     <div class="view" id="view-checklist">
-      <div class="list-toolbar"><h2>Odjezdový checklist</h2></div>
-      <div class="empty-state"><span class="icon">✅</span>Tahle sekce je zatím prázdná — brzy sem přidáme check-listy na sbalení před odjezdem.</div>
+      <div class="list-toolbar">
+        <h2>Odjezdový checklist</h2>
+        <button class="btn-chip" id="btn-checklist-reset">↺ Resetovat vše</button>
+      </div>
+      <div id="checklist-progress" style="padding:0 18px 8px; font-size:12.5px; color:var(--cream-dim);"></div>
+      <div id="checklist-content"></div>
     </div>
   </main>
 
@@ -573,6 +593,22 @@
   </div>
 </div>
 
+<div class="sheet" id="sheet-checklist-item">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h2>Přidat položku</h2>
+    <label class="field"><span>Kategorie</span>
+      <input type="text" id="ci-category" list="ci-category-list" placeholder="např. Kemp, základ">
+      <datalist id="ci-category-list"></datalist>
+    </label>
+    <label class="field"><span>Položka</span>
+      <input type="text" id="ci-text" placeholder="např. Spacáky">
+    </label>
+    <button class="btn-primary" id="btn-checklist-item-save">Přidat</button>
+    <button class="btn-secondary" id="btn-checklist-item-cancel">Zrušit</button>
+  </div>
+</div>
+
 <div id="lightbox"><img id="lightbox-img" src=""></div>
   </div>
 
@@ -713,7 +749,8 @@
   let isEditor = false;
   let currentUserEmail = null;
   let pendingPhotos = [];
-  let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null;
+  let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null, checklistCollection = null;
+  let checklistItems = [];
   let tileErrorShown = false;
 
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -750,12 +787,12 @@
     if(v==="kempy") renderKempyList();
     if(v==="denik") showDiaryFolderList();
     if(v==="zolik") renderZolikList();
+    if(v==="checklist") renderChecklist();
     updateFab();
   }
   function updateFab(){
     const fab = document.getElementById("fab-add");
     if(currentView==="zolik" && currentGameId){ fab.classList.add("hidden"); return; }
-    if(currentView==="checklist"){ fab.classList.add("hidden"); return; }
     fab.classList.remove("hidden");
     fab.textContent = "➕";
   }
@@ -767,6 +804,7 @@
       else openDiaryForm(null);
     }
     else if(currentView==="zolik") openZolikNewGame();
+    else if(currentView==="checklist") openChecklistItemForm();
   });
 
   /* ---------------- Map tile helper (Mapy.com) ---------------- */
@@ -944,7 +982,7 @@
   const sheetDiaryView = document.getElementById("sheet-diary-view");
   const sheetZolikNew = document.getElementById("sheet-zolik-new");
   const sheetLogin = document.getElementById("sheet-login");
-  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew, sheetLogin];
+  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew, sheetLogin, document.getElementById("sheet-checklist-item")];
 
   function openSheet(sheet){
     backdrop.classList.add("active");
@@ -1827,9 +1865,113 @@
     }catch(err){ console.error(err); alert("Založení hry se nepovedlo."); }
   });
 
+  /* ================= CHECKLIST (Odjezdový checklist) ================= */
+  const CHECKLIST_DEFAULTS = {
+    "Kemp, základ": ["Židle","Stoly","Prostěradlo do stanu","Spacáky","Polštářky","Kuchyňské vybavení","Vařič","Dřez","Kávovar","Lednice"],
+    "Doma": ["Prkýnko","Nůž","Sůl, pepř, koření","Jar","Houbu","Utěrky","Role papírových utěrek","Sáčky na odpadky","Ikea sáčky na jídlo","Stínění oken?","Toaletní papír","Žabky do sprchy","Nějaký deštník / stínění","Kolečka na horké hrnce","Chladicí taška","Léky – základní + záda, náplasti","Opalovací krémy","Repelent","Sprcháč","Šampon","Pasta","Deka na pláž","Karty, hry","Powerbanky","Čelovka","Malý batoh na výlety","Boty do moře","Tatranky, polévky, kaše","Káva"],
+    "Dekač, Obchod": ["Klobouk","Tričko obyč","Nazouváky nějaké","Vlhčené ubrousky","Svítilna do stanu","Trička Karel","Na přání něco","Deodorant","Fenistil gel","Odličovací ubrousky","Repelent"],
+    "Oblečení": ["Plavky","Kraťasy, sukně","Legíny","Trička","Spodní prádlo","Tričko na spaní","Mikina","Bunda nepromok, neprofuk","Kšiltovka","Ručníky k moři, do sprchy","Sandály","Altry, cloudy","Klobouk, kšiltovka"]
+  };
+
+  async function seedChecklistDefaults(){
+    if(!requireEditor()) return;
+    if(!checklistCollection) return;
+    if(!confirm("Načíst výchozí seznam věcí na sbalení?")) return;
+    let order = 0;
+    try{
+      for(const category of Object.keys(CHECKLIST_DEFAULTS)){
+        for(const text of CHECKLIST_DEFAULTS[category]){
+          await window.fb.addDoc(checklistCollection, { category, text, checked:false, order: order++, createdAt: Date.now() });
+        }
+      }
+    }catch(err){ console.error(err); alert("Načtení výchozího seznamu se nepovedlo."); }
+  }
+
+  function renderChecklist(){
+    const container = document.getElementById("checklist-content");
+    const progressEl = document.getElementById("checklist-progress");
+    if(!checklistItems.length){
+      progressEl.textContent = "";
+      container.innerHTML = `<div class="empty-state"><span class="icon">✅</span>Zatím žádné položky.<br><br>
+        <button class="btn-primary" id="btn-checklist-seed" style="max-width:280px;">Načíst výchozí seznam věcí</button>
+        <br><span style="font-size:12px;">nebo přidej první položku přes ➕</span>
+      </div>`;
+      const seedBtn = document.getElementById("btn-checklist-seed");
+      if(seedBtn) seedBtn.addEventListener("click", seedChecklistDefaults);
+      return;
+    }
+    const checkedCount = checklistItems.filter(i=>i.checked).length;
+    progressEl.textContent = `${checkedCount} / ${checklistItems.length} sbaleno`;
+
+    const categories = [];
+    checklistItems.forEach(i=>{ if(!categories.includes(i.category)) categories.push(i.category||"Ostatní"); });
+
+    container.innerHTML = "";
+    categories.forEach(cat=>{
+      const catEl = document.createElement("div");
+      catEl.className = "checklist-category";
+      catEl.textContent = cat;
+      container.appendChild(catEl);
+      checklistItems.filter(i=>(i.category||"Ostatní")===cat).sort((a,b)=>(a.order||0)-(b.order||0)).forEach(item=>{
+        const row = document.createElement("div");
+        row.className = "checklist-row";
+        row.innerHTML = `
+          <input type="checkbox" id="ci-${item.id}" ${item.checked?"checked":""}>
+          <label class="txt ${item.checked?"checked":""}" for="ci-${item.id}">${escapeHtml(item.text)}</label>
+          <button class="rm" data-id="${item.id}">✕</button>`;
+        row.querySelector("input").addEventListener("change", async (e)=>{
+          if(!requireEditor()){ e.target.checked = item.checked; return; }
+          try{ await window.fb.updateDoc(window.fb.doc(window.fb.db,"checklist_items",item.id), { checked: e.target.checked }); }
+          catch(err){ console.error(err); e.target.checked = item.checked; }
+        });
+        row.querySelector(".rm").addEventListener("click", async ()=>{
+          if(!requireEditor()) return;
+          if(!confirm(`Smazat položku "${item.text}"?`)) return;
+          try{ await window.fb.deleteDoc(window.fb.doc(window.fb.db,"checklist_items",item.id)); }
+          catch(err){ console.error(err); alert("Smazání se nepovedlo."); }
+        });
+        container.appendChild(row);
+      });
+    });
+  }
+
+  document.getElementById("btn-checklist-reset").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
+    if(!checklistItems.length) return;
+    if(!confirm("Odškrtnout všechny položky? (Použij před další cestou.)")) return;
+    try{
+      for(const item of checklistItems.filter(i=>i.checked)){
+        await window.fb.updateDoc(window.fb.doc(window.fb.db,"checklist_items",item.id), { checked:false });
+      }
+    }catch(err){ console.error(err); alert("Reset se nepovedl."); }
+  });
+
+  function openChecklistItemForm(){
+    if(!requireEditor()) return;
+    document.getElementById("ci-category").value = "";
+    document.getElementById("ci-text").value = "";
+    const dl = document.getElementById("ci-category-list");
+    const cats = [...new Set(checklistItems.map(i=>i.category).filter(Boolean))];
+    dl.innerHTML = cats.map(c=>`<option value="${escapeHtml(c)}">`).join("");
+    closeSheets();
+    openSheet(document.getElementById("sheet-checklist-item"));
+  }
+  document.getElementById("btn-checklist-item-cancel").addEventListener("click", closeSheets);
+  document.getElementById("btn-checklist-item-save").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
+    const category = document.getElementById("ci-category").value.trim() || "Ostatní";
+    const text = document.getElementById("ci-text").value.trim();
+    if(!text){ alert("Napiš, co chceš přidat."); return; }
+    if(!checklistCollection){ alert("Appka ještě není připojená k databázi."); return; }
+    try{
+      await window.fb.addDoc(checklistCollection, { category, text, checked:false, order: Date.now(), createdAt: Date.now() });
+      closeSheets();
+    }catch(err){ console.error(err); alert("Přidání se nepovedlo."); }
+  });
+
   /* ---------------- Export / Import ---------------- */
   document.getElementById("btn-export").addEventListener("click", ()=>{
-    const payload = { camps, diary: diaryEntries, diary_folders: diaryFolders, zolik_games: zolikGames };
+    const payload = { camps, diary: diaryEntries, diary_folders: diaryFolders, zolik_games: zolikGames, checklist_items: checklistItems };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1850,8 +1992,9 @@
         const diaryIn = Array.isArray(data) ? [] : (data.diary||[]);
         const foldersIn = Array.isArray(data) ? [] : (data.diary_folders||[]);
         const gamesIn = Array.isArray(data) ? [] : (data.zolik_games||[]);
+        const checklistIn = Array.isArray(data) ? [] : (data.checklist_items||[]);
         if(!campsCollection){ alert("Appka ještě není připojená k databázi."); return; }
-        const total = campsIn.length + diaryIn.length + foldersIn.length + gamesIn.length;
+        const total = campsIn.length + diaryIn.length + foldersIn.length + gamesIn.length + checklistIn.length;
         if(!confirm(`Naimportovat ${total} položek do sdílené databáze? Může to vytvořit duplicity.`)) return;
         for(const item of campsIn){
           await window.fb.addDoc(campsCollection, {
@@ -1882,6 +2025,13 @@
             createdAt: item.createdAt || Date.now()
           });
         }
+        for(const item of checklistIn){
+          await window.fb.addDoc(checklistCollection, {
+            category: item.category || "Ostatní", text: item.text || "",
+            checked: !!item.checked, order: item.order || Date.now(),
+            createdAt: item.createdAt || Date.now()
+          });
+        }
         alert("Import hotov.");
       }catch(err){
         console.error(err);
@@ -1898,6 +2048,7 @@
     diaryCollection = window.fb.collection(window.fb.db, "diary");
     diaryFoldersCollection = window.fb.collection(window.fb.db, "diary_folders");
     zolikCollection = window.fb.collection(window.fb.db, "zolik_games");
+    checklistCollection = window.fb.collection(window.fb.db, "checklist_items");
 
     window.fb.onSnapshot(window.fb.query(campsCollection, window.fb.orderBy("order","asc")), (snap)=>{
       camps = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -1927,6 +2078,11 @@
         else renderZolikList();
       }
     }, (err)=> console.error("zolik sync error:", err));
+
+    window.fb.onSnapshot(window.fb.query(checklistCollection, window.fb.orderBy("order","asc")), (snap)=>{
+      checklistItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      if(currentView==="checklist") renderChecklist();
+    }, (err)=> console.error("checklist sync error:", err));
   }
   let syncStarted = false;
   window.addEventListener("fb-ready", (e)=>{
