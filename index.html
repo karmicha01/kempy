@@ -43,9 +43,10 @@
       var(--bg);
   }
   #app{ height:100dvh; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  #app-content{ flex:1; min-height:0; display:flex; flex-direction:column; position:relative; }
 
-  /* ---------- Desktop framing ---------- */
-  @media (min-width: 700px) and (min-height: 640px){
+  /* ---------- Tablet: keep the phone-card look ---------- */
+  @media (min-width: 700px) and (max-width: 1099px) and (min-height: 640px){
     body{
       overflow:auto;
       display:flex; align-items:center; justify-content:center;
@@ -338,11 +339,34 @@
   .zolik-players-row button{ background:none; border:none; color: var(--ember-deep); font-size:18px; }
 
   ::-webkit-scrollbar{ width:0; height:0; }
+  /* ---------- Desktop: full-screen sidebar layout (kept last so it wins the cascade) ---------- */
+  @media (min-width: 1100px){
+    body{ overflow:hidden; }
+    #app{ flex-direction:row; height:100dvh; width:100vw; }
+    .hamburger{ display:none; }
+    .header-text{ margin-left:0; }
+    header{ padding-left:32px; }
+    #app-content{ order:2; }
+    .drawer-backdrop{ display:none !important; }
+    .drawer{
+      position:relative; top:auto; left:auto; bottom:auto; order:1;
+      transform:none !important;
+      width:270px; min-width:270px; max-width:270px; flex-shrink:0;
+      border-right:1px solid var(--line); box-shadow:none;
+    }
+    .view{ padding-bottom: calc(24px + var(--safe-bottom)); }
+    .fab{ right:32px; bottom: calc(32px + var(--safe-bottom)); }
+    .sheet{ left:50%; right:auto; width:min(520px, calc(100% - 48px)); transform: translate(-50%, 100%); border-radius:20px; bottom:24px; max-height:82dvh; }
+    .sheet.active{ transform: translate(-50%, 0); }
+    .card-list{ display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-content:start; }
+    .camp-card{ height:fit-content; }
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <div class="setup-banner" id="setup-banner"></div>
+  <div id="app-content">
   <header>
     <button class="hamburger" id="btn-menu" aria-label="Menu">☰</button>
     <div class="header-text">
@@ -409,21 +433,6 @@
   </main>
 
   <button class="fab" id="fab-add">➕</button>
-
-<div class="drawer-backdrop" id="drawer-backdrop"></div>
-<nav class="drawer" id="drawer">
-  <div class="drawer-header"><h2>🔥 ŽampinK</h2></div>
-  <button class="drawer-item active" data-view="mapa"><span class="ic">🗺️</span> Mapa</button>
-  <button class="drawer-item" data-view="kempy"><span class="ic">🏕️</span> Kempy</button>
-  <button class="drawer-item" data-view="denik"><span class="ic">📖</span> Deník</button>
-  <button class="drawer-item" data-view="zolik"><span class="ic">🃏</span> Žolík</button>
-  <button class="drawer-item" data-view="checklist"><span class="ic">✅</span> Odjezdový checklist</button>
-  <div class="drawer-sep"></div>
-  <button class="drawer-item" id="btn-auth"><span class="ic">🔐</span> Přihlásit se</button>
-  <div class="drawer-sep"></div>
-  <button class="drawer-item" id="btn-export"><span class="ic">⬇️</span> Exportovat zálohu</button>
-  <button class="drawer-item" id="btn-import"><span class="ic">⬆️</span> Importovat ze zálohy</button>
-</nav>
 
 <div class="sheet-backdrop" id="backdrop"></div>
 
@@ -565,6 +574,22 @@
 </div>
 
 <div id="lightbox"><img id="lightbox-img" src=""></div>
+  </div>
+
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<nav class="drawer" id="drawer">
+  <div class="drawer-header"><h2>🔥 ŽampinK</h2></div>
+  <button class="drawer-item active" data-view="mapa"><span class="ic">🗺️</span> Mapa</button>
+  <button class="drawer-item" data-view="kempy"><span class="ic">🏕️</span> Kempy</button>
+  <button class="drawer-item" data-view="denik" style="display:none;"><span class="ic">📖</span> Deník</button>
+  <button class="drawer-item" data-view="zolik"><span class="ic">🃏</span> Žolík</button>
+  <button class="drawer-item" data-view="checklist"><span class="ic">✅</span> Odjezdový checklist</button>
+  <div class="drawer-sep"></div>
+  <button class="drawer-item" id="btn-auth"><span class="ic">🔐</span> Přihlásit se</button>
+  <div class="drawer-sep"></div>
+  <button class="drawer-item" id="btn-export"><span class="ic">⬇️</span> Exportovat zálohu</button>
+  <button class="drawer-item" id="btn-import"><span class="ic">⬆️</span> Importovat ze zálohy</button>
+</nav>
 </div>
 <input type="file" id="import-input" accept="application/json" style="display:none">
 
@@ -718,6 +743,7 @@
   /* ---------------- Navigation ---------------- */
   const views = document.querySelectorAll(".view");
   function switchView(v){
+    if(v==="denik" && !isEditor){ v = "mapa"; }
     currentView = v;
     views.forEach(el=> el.classList.toggle("active", el.id === "view-"+v));
     if(v==="mapa"){ setTimeout(()=>mainMap.invalidateSize(), 50); renderMapMarkers(); }
@@ -956,6 +982,9 @@
     } else {
       btn.innerHTML = `<span class="ic">🔐</span> Přihlásit se`;
     }
+    const diaryNavBtn = document.querySelector('.drawer-item[data-view="denik"]');
+    diaryNavBtn.style.display = isEditor ? "flex" : "none";
+    if(!isEditor && currentView==="denik") switchView("mapa");
   }
   function requireEditor(){
     if(!isEditor){
