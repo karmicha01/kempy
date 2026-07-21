@@ -415,6 +415,21 @@
       <div id="list-kempy" class="card-list"></div>
     </div>
 
+    <div class="view" id="view-tipy">
+      <div class="segmented" id="tipy-segmented">
+        <button data-tab="visited" class="active">Navštívené</button>
+        <button data-tab="wishlist">Chci navštívit</button>
+      </div>
+      <div style="padding:10px 18px 0;">
+        <select class="sortsel" id="filter-tipy-country" style="width:100%;"></select>
+      </div>
+      <div class="list-toolbar">
+        <h2 id="tipy-title">Navštívené</h2>
+        <select class="sortsel" id="sort-tipy"></select>
+      </div>
+      <div id="list-tipy" class="card-list"></div>
+    </div>
+
     <div class="view" id="view-denik">
       <div id="denik-folders-wrap">
         <div class="list-toolbar"><h2>Deník z cest</h2></div>
@@ -609,6 +624,67 @@
   </div>
 </div>
 
+<div class="sheet" id="sheet-tip-form">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <h2 id="tip-form-title">Přidat tip</h2>
+    <input type="hidden" id="tip-edit-id">
+
+    <label class="field"><span>Název</span>
+      <input type="text" id="t-name" placeholder="např. Vodopád Kozí hřbety">
+    </label>
+
+    <label class="field"><span>Země (nepovinné)</span>
+      <select id="t-country"></select>
+    </label>
+
+    <label class="field"><span>Vyhledat na mapě</span>
+      <div class="searchrow">
+        <input type="text" id="t-search" placeholder="Piš a vyber z návrhů…">
+        <button id="btn-t-search" type="button">Hledat</button>
+      </div>
+      <div class="search-results" id="t-search-results"></div>
+      <div class="minimap" id="t-minimap"></div>
+      <div class="mini-attrib"><a href="https://mapy.com" target="_blank" rel="noopener">Mapy.com</a> © Seznam.cz a.s. a další</div>
+      <div style="font-size:11px;color:var(--cream-dim);margin-bottom:6px;">Klepnutím na mapu umístíš/posuneš špendlík.</div>
+    </label>
+
+    <div class="coordrow" style="margin-bottom:14px;">
+      <label class="field" style="margin-bottom:0;"><span>Lat</span><input type="number" step="any" id="t-lat"></label>
+      <label class="field" style="margin-bottom:0;"><span>Lng</span><input type="number" step="any" id="t-lng"></label>
+    </div>
+
+    <label class="field"><span>Odkaz Google Maps (nepovinné)</span>
+      <input type="text" id="t-gmaps" placeholder="https://maps.google.com/…">
+      <button type="button" class="btn-chip" id="btn-import-tgmaps" style="margin-top:8px;">📍 Načíst polohu z odkazu</button>
+    </label>
+    <label class="field"><span>Odkaz Mapy.com (nepovinné)</span>
+      <input type="text" id="t-mapyurl" placeholder="https://mapy.com/…">
+    </label>
+    <label class="field"><span>Odkaz Instagram (nepovinné)</span>
+      <input type="text" id="t-instagram" placeholder="https://instagram.com/…">
+    </label>
+    <label class="field"><span>Odkaz TikTok (nepovinné)</span>
+      <input type="text" id="t-tiktok" placeholder="https://tiktok.com/…">
+    </label>
+
+    <label class="field"><span>Stav</span>
+      <div class="visited-toggle">
+        <button type="button" id="t-toggle-visited" data-val="1">Navštíveno</button>
+        <button type="button" id="t-toggle-wishlist" data-val="0">Chci navštívit</button>
+      </div>
+    </label>
+
+    <label class="field"><span>Popisek</span>
+      <textarea id="t-note" placeholder="Co je na tom místě zajímavého..."></textarea>
+    </label>
+
+    <button class="btn-primary" id="btn-tip-save">Uložit tip</button>
+    <button class="btn-secondary btn-danger" id="btn-tip-delete" style="display:none;">Smazat tip</button>
+    <button class="btn-secondary" id="btn-tip-cancel">Zrušit</button>
+  </div>
+</div>
+
 <div id="lightbox"><img id="lightbox-img" src=""></div>
   </div>
 
@@ -617,6 +693,7 @@
   <div class="drawer-header"><h2>🔥 ŽampinK</h2></div>
   <button class="drawer-item active" data-view="mapa"><span class="ic">🗺️</span> Mapa</button>
   <button class="drawer-item" data-view="kempy"><span class="ic">🏕️</span> Kempy</button>
+  <button class="drawer-item" data-view="tipy"><span class="ic">📍</span> Tipy na výlety</button>
   <button class="drawer-item" data-view="denik" style="display:none;"><span class="ic">📖</span> Deník</button>
   <button class="drawer-item" data-view="zolik"><span class="ic">🃏</span> Žolík</button>
   <button class="drawer-item" data-view="checklist"><span class="ic">✅</span> Odjezdový checklist</button>
@@ -728,9 +805,10 @@
   ].sort((a,b)=> a.name.localeCompare(b.name, "cs"));
   const COUNTRY_BY_CODE = Object.fromEntries(EUROPEAN_COUNTRIES.map(c=>[c.code,c]));
   function populateCountrySelect(){
-    const sel = document.getElementById("f-country");
-    sel.innerHTML = `<option value="">Nevybráno</option>` +
+    const opts = `<option value="">Nevybráno</option>` +
       EUROPEAN_COUNTRIES.map(c=>`<option value="${c.code}">${c.flag} ${c.name}</option>`).join("");
+    document.getElementById("f-country").innerHTML = opts;
+    document.getElementById("t-country").innerHTML = opts;
   }
   function countryLabel(code){
     const c = COUNTRY_BY_CODE[code];
@@ -742,14 +820,19 @@
   let diaryFolders = [];
   let currentDiaryFolderId = null;
   let zolikGames = [];
-  let mainMap, minimap, minimapMarker, mainMarkers = {};
+  let mainMap, minimap, minimapMarker, mainMarkers = {}, tipMarkers = {};
   let currentView = "mapa";
   let currentKempyTab = "visited";
   let currentGameId = null;
   let isEditor = false;
   let currentUserEmail = null;
   let pendingPhotos = [];
-  let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null, checklistCollection = null;
+  let campsCollection = null, diaryCollection = null, diaryFoldersCollection = null, zolikCollection = null, checklistCollection = null, tipsCollection = null;
+  let tips = [];
+  let currentTipsTab = "visited";
+  let currentTipsCountryFilter = "";
+  let visitedStateTip = true;
+  let tMinimap, tMinimapMarker;
   let checklistItems = [];
   let tileErrorShown = false;
 
@@ -785,6 +868,7 @@
     views.forEach(el=> el.classList.toggle("active", el.id === "view-"+v));
     if(v==="mapa"){ setTimeout(()=>mainMap.invalidateSize(), 50); renderMapMarkers(); }
     if(v==="kempy") renderKempyList();
+    if(v==="tipy") renderTipsList();
     if(v==="denik") showDiaryFolderList();
     if(v==="zolik") renderZolikList();
     if(v==="checklist") renderChecklist();
@@ -799,6 +883,7 @@
   document.getElementById("fab-add").addEventListener("click", ()=>{
     if(!requireEditor()) return;
     if(currentView==="mapa" || currentView==="kempy") openForm(null);
+    else if(currentView==="tipy") openTipForm(null);
     else if(currentView==="denik"){
       if(currentDiaryFolderId===null) createDiaryFolder();
       else openDiaryForm(null);
@@ -839,10 +924,19 @@
       iconSize:[26,26], iconAnchor:[13,22], popupAnchor:[0,-20]
     });
   }
+  function tipIcon(visited){
+    return L.divIcon({
+      className: "",
+      html: `<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))">${visited?'🎥':'🔖'}</div>`,
+      iconSize:[24,24], iconAnchor:[12,20], popupAnchor:[0,-18]
+    });
+  }
   function renderMapMarkers(){
     if(!mainMap) return;
     Object.values(mainMarkers).forEach(m=>mainMap.removeLayer(m));
     mainMarkers = {};
+    Object.values(tipMarkers).forEach(m=>mainMap.removeLayer(m));
+    tipMarkers = {};
     const withLoc = camps.filter(c=> c.lat!=null && c.lng!=null);
     withLoc.forEach(c=>{
       const marker = L.marker([c.lat,c.lng], {icon: flameIcon(c.visited?'ember':'moss')}).addTo(mainMap);
@@ -860,8 +954,28 @@
       });
       mainMarkers[c.id] = marker;
     });
-    if(withLoc.length){
-      const bounds = L.latLngBounds(withLoc.map(c=>[c.lat,c.lng]));
+    const tipsWithLoc = tips.filter(t=> t.lat!=null && t.lng!=null);
+    tipsWithLoc.forEach(t=>{
+      const marker = L.marker([t.lat,t.lng], {icon: tipIcon(t.visited)}).addTo(mainMap);
+      const countryStr = countryLabel(t.country);
+      const statusStr = t.visited ? "navštíveno" : "na seznamu přání";
+      let links = "";
+      if(t.instagramUrl) links += `<a href="${t.instagramUrl}" target="_blank" rel="noopener">Instagram ↗</a>`;
+      if(t.tiktokUrl) links += `<a href="${t.tiktokUrl}" target="_blank" rel="noopener">TikTok ↗</a>`;
+      if(t.googleMapsUrl) links += `<a href="${t.googleMapsUrl}" target="_blank" rel="noopener">Google Maps ↗</a>`;
+      if(t.mapyUrl) links += `<a href="${t.mapyUrl}" target="_blank" rel="noopener">Mapy.com ↗</a>`;
+      marker.bindPopup(`<div class="popup-title">${escapeHtml(t.name||"Bez názvu")}</div>${countryStr?`<div class="popup-flames">${countryStr}</div>`:""}<div class="popup-flames">${statusStr}</div>${links?`<div class="popup-links">${links}</div>`:""}`);
+      marker.on("click", ()=> marker.openPopup());
+      marker.on("popupopen", ()=>{
+        const el = marker.getPopup().getElement();
+        const trigger = el.querySelector(".popup-title");
+        if(trigger) trigger.addEventListener("click", ()=> openTipForm(t.id));
+      });
+      tipMarkers[t.id] = marker;
+    });
+    const allLoc = [...withLoc.map(c=>[c.lat,c.lng]), ...tipsWithLoc.map(t=>[t.lat,t.lng])];
+    if(allLoc.length){
+      const bounds = L.latLngBounds(allLoc);
       mainMap.fitBounds(bounds.pad(0.25));
     }
   }
@@ -975,6 +1089,290 @@
     }catch(err){ console.error(err); alert("Změna pořadí se nepovedla."); }
   }
 
+  /* ================= TIPY NA VÝLETY ================= */
+  const tipySegBtns = document.querySelectorAll("#tipy-segmented button");
+  tipySegBtns.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      currentTipsTab = btn.dataset.tab;
+      tipySegBtns.forEach(b=>b.classList.toggle("active", b===btn));
+      document.getElementById("tipy-title").textContent = currentTipsTab==="visited" ? "Navštívené" : "Chci navštívit";
+      setTipsSortOptions();
+      renderTipsList();
+    });
+  });
+  function setTipsSortOptions(){
+    const sel = document.getElementById("sort-tipy");
+    if(currentTipsTab==="visited"){
+      sel.innerHTML = `<option value="name">Abecedně</option><option value="date">Nejnovější</option><option value="country">Podle země</option>`;
+    } else {
+      sel.innerHTML = `<option value="priority">Priorita</option><option value="name">Abecedně</option><option value="date">Nejnovější přidané</option><option value="country">Podle země</option>`;
+    }
+  }
+  document.getElementById("sort-tipy").addEventListener("change", renderTipsList);
+  setTipsSortOptions();
+
+  let currentTipsCountryFilterSel;
+  function populateTipsCountryFilter(){
+    const sel = document.getElementById("filter-tipy-country");
+    const prev = currentTipsCountryFilter;
+    const present = new Set(tips.map(t=>t.country).filter(Boolean));
+    const options = EUROPEAN_COUNTRIES.filter(c=>present.has(c.code));
+    sel.innerHTML = `<option value="">Všechny země</option>` +
+      options.map(c=>`<option value="${c.code}">${c.flag} ${c.name}</option>`).join("");
+    if(present.has(prev)) sel.value = prev; else { sel.value=""; currentTipsCountryFilter=""; }
+  }
+  document.getElementById("filter-tipy-country").addEventListener("change", (e)=>{
+    currentTipsCountryFilter = e.target.value;
+    renderTipsList();
+  });
+
+  function renderTipsList(){
+    const container = document.getElementById("list-tipy");
+    let items = tips.filter(t => currentTipsTab==="visited" ? t.visited : !t.visited);
+    if(currentTipsCountryFilter) items = items.filter(t => t.country === currentTipsCountryFilter);
+    const mode = document.getElementById("sort-tipy").value;
+    if(mode==="name") items.sort((a,b)=> (a.name||"").localeCompare(b.name||"", "cs"));
+    else if(mode==="date") items.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    else if(mode==="priority") items.sort((a,b)=> (a.order||0)-(b.order||0));
+    else if(mode==="country") items.sort((a,b)=> countryLabel(a.country).localeCompare(countryLabel(b.country), "cs") || (a.name||"").localeCompare(b.name||"", "cs"));
+
+    container.innerHTML = "";
+    if(!items.length){
+      const filterActive = !!currentTipsCountryFilter;
+      container.innerHTML = filterActive
+        ? `<div class="empty-state"><span class="icon">📍</span>Žádný tip v téhle zemi neodpovídá filtru.</div>`
+        : `<div class="empty-state"><span class="icon">📍</span>
+        ${currentTipsTab==="visited" ? "Zatím žádné navštívené místo. Přidej první přes ➕." : "Seznam přání je prázdný. Přidej tip, který chceš navštívit."}</div>`;
+      return;
+    }
+    items.forEach(t=>{
+      const card = document.createElement("div");
+      card.className = "camp-card";
+      const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleDateString("cs-CZ") : "";
+      const countryStr = countryLabel(t.country);
+      let links = "";
+      if(t.instagramUrl) links += `<a class="link-chip" href="${t.instagramUrl}" target="_blank" rel="noopener">Instagram ↗</a>`;
+      if(t.tiktokUrl) links += `<a class="link-chip" href="${t.tiktokUrl}" target="_blank" rel="noopener">TikTok ↗</a>`;
+      if(t.googleMapsUrl) links += `<a class="link-chip" href="${t.googleMapsUrl}" target="_blank" rel="noopener">Google Maps ↗</a>`;
+      if(t.mapyUrl) links += `<a class="link-chip" href="${t.mapyUrl}" target="_blank" rel="noopener">Mapy.com ↗</a>`;
+      card.innerHTML = `
+        <div class="thumb">${t.visited?"🎥":"🔖"}</div>
+        <div class="info">
+          <div class="row1"><h3>${escapeHtml(t.name||"Bez názvu")}</h3></div>
+          ${t.note ? `<div class="note">${escapeHtml(t.note)}</div>` : ""}
+          <div class="meta">${[countryStr, dateStr].filter(Boolean).join(" · ")}</div>
+          ${links ? `<div class="link-chip-row">${links}</div>` : ""}
+        </div>`;
+      card.querySelector(".info").addEventListener("click", (e)=>{
+        if(e.target.closest("a")) return;
+        openTipForm(t.id);
+      });
+      card.querySelector(".thumb").addEventListener("click", ()=> openTipForm(t.id));
+      if(currentTipsTab==="wishlist" && mode==="priority"){
+        const reorder = document.createElement("div");
+        reorder.className = "reorder-btns";
+        reorder.innerHTML = `<button data-dir="up">▲</button><button data-dir="down">▼</button>`;
+        reorder.querySelectorAll("button").forEach(btn=>{
+          btn.addEventListener("click", (e)=>{
+            e.stopPropagation();
+            moveInArrayTip(t.id, btn.dataset.dir);
+          });
+        });
+        card.appendChild(reorder);
+      }
+      container.appendChild(card);
+    });
+  }
+  async function moveInArrayTip(id, dir){
+    if(!requireEditor()) return;
+    const wishlist = tips.filter(t=>!t.visited).sort((a,b)=>(a.order||0)-(b.order||0));
+    const idx = wishlist.findIndex(t=>t.id===id);
+    const swapWith = dir==="up" ? idx-1 : idx+1;
+    if(idx<0 || swapWith<0 || swapWith>=wishlist.length) return;
+    const a = wishlist[idx], b = wishlist[swapWith];
+    try{
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,"trip_tips",a.id), {order: b.order||0});
+      await window.fb.updateDoc(window.fb.doc(window.fb.db,"trip_tips",b.id), {order: a.order||0});
+    }catch(err){ console.error(err); alert("Změna pořadí se nepovedla."); }
+  }
+
+  function openTipForm(id){
+    const t = id ? tips.find(x=>x.id===id) : null;
+    document.getElementById("tip-form-title").textContent = t ? "Upravit tip" : "Přidat tip";
+    document.getElementById("tip-edit-id").value = id || "";
+    document.getElementById("t-name").value = t ? (t.name||"") : "";
+    document.getElementById("t-country").value = t ? (t.country||"") : "";
+    document.getElementById("t-lat").value = t && t.lat!=null ? t.lat : "";
+    document.getElementById("t-lng").value = t && t.lng!=null ? t.lng : "";
+    document.getElementById("t-gmaps").value = t ? (t.googleMapsUrl||"") : "";
+    document.getElementById("t-mapyurl").value = t ? (t.mapyUrl||"") : "";
+    document.getElementById("t-instagram").value = t ? (t.instagramUrl||"") : "";
+    document.getElementById("t-tiktok").value = t ? (t.tiktokUrl||"") : "";
+    document.getElementById("t-note").value = t ? (t.note||"") : "";
+    document.getElementById("t-search").value = "";
+    document.getElementById("t-search-results").innerHTML = "";
+    visitedStateTip = t ? !!t.visited : true;
+    updateTipVisitedToggle();
+    document.getElementById("btn-tip-delete").style.display = t ? "block" : "none";
+    closeSheets();
+    openSheet(document.getElementById("sheet-tip-form"));
+    setTimeout(initTipMinimap, 50);
+    setTimeout(()=>{
+      const lat = t && t.lat!=null ? t.lat : 49.8;
+      const lng = t && t.lng!=null ? t.lng : 15.5;
+      tMinimap.setView([lat,lng], t && t.lat!=null ? 12 : 7);
+      placeTipMinimapMarker(lat, lng, !!(t && t.lat!=null));
+    }, 60);
+  }
+  function updateTipVisitedToggle(){
+    document.getElementById("t-toggle-visited").classList.toggle("on", visitedStateTip);
+    document.getElementById("t-toggle-wishlist").classList.toggle("on", !visitedStateTip);
+  }
+  document.getElementById("t-toggle-visited").addEventListener("click", ()=>{ visitedStateTip=true; updateTipVisitedToggle(); });
+  document.getElementById("t-toggle-wishlist").addEventListener("click", ()=>{ visitedStateTip=false; updateTipVisitedToggle(); });
+  document.getElementById("btn-tip-cancel").addEventListener("click", closeSheets);
+
+  function initTipMinimap(){
+    if(tMinimap){ tMinimap.remove(); tMinimap=null; }
+    tMinimap = L.map("t-minimap", {zoomControl:false, attributionControl:false}).setView([49.8,15.5], 7);
+    mapyTileLayer("basic").addTo(tMinimap);
+    tMinimap.on("click", (e)=>{
+      placeTipMinimapMarker(e.latlng.lat, e.latlng.lng, true);
+      document.getElementById("t-lat").value = e.latlng.lat.toFixed(6);
+      document.getElementById("t-lng").value = e.latlng.lng.toFixed(6);
+    });
+  }
+  function placeTipMinimapMarker(lat,lng, show){
+    if(tMinimapMarker){ tMinimap.removeLayer(tMinimapMarker); tMinimapMarker=null; }
+    if(show){ tMinimapMarker = L.marker([lat,lng], {icon: flameIcon('ember')}).addTo(tMinimap); }
+  }
+  ["t-lat","t-lng"].forEach(id=>{
+    document.getElementById(id).addEventListener("change", ()=>{
+      const lat = parseFloat(document.getElementById("t-lat").value);
+      const lng = parseFloat(document.getElementById("t-lng").value);
+      if(!isNaN(lat) && !isNaN(lng) && tMinimap){
+        tMinimap.setView([lat,lng], 12);
+        placeTipMinimapMarker(lat,lng,true);
+      }
+    });
+  });
+
+  let tSuggestTimer = null;
+  let tSuggestSeq = 0;
+  document.getElementById("btn-t-search").addEventListener("click", ()=> doTipSuggest(document.getElementById("t-search").value.trim()));
+  document.getElementById("t-search").addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); doTipSuggest(e.target.value.trim()); }});
+  document.getElementById("t-search").addEventListener("input", (e)=>{
+    const q = e.target.value.trim();
+    clearTimeout(tSuggestTimer);
+    const resultsEl = document.getElementById("t-search-results");
+    if(q.length < 2){ resultsEl.innerHTML = ""; return; }
+    tSuggestTimer = setTimeout(()=> doTipSuggest(q), 280);
+  });
+  function doTipSuggest(q){
+    const resultsEl = document.getElementById("t-search-results");
+    if(!q){ resultsEl.innerHTML = ""; return; }
+    if(needsMapySetup){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Chybí Mapy.com API klíč.</div>`; return; }
+    const mySeq = ++tSuggestSeq;
+    resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Hledám…</div>`;
+    fetch(`https://api.mapy.com/v1/suggest?apikey=${MAPY_API_KEY}&query=${encodeURIComponent(q)}&lang=cs&limit=6`)
+      .then(r=>r.json())
+      .then(data=>{
+        if(mySeq !== tSuggestSeq) return;
+        const items = data.items || [];
+        resultsEl.innerHTML = "";
+        if(!items.length){ resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Nic nenalezeno.</div>`; return; }
+        items.forEach(item=>{
+          const div = document.createElement("div");
+          div.innerHTML = `<b>${escapeHtml(item.name)}</b><br><span style="color:var(--cream-dim);font-size:11px;">${escapeHtml(item.location||item.label||"")}</span>`;
+          div.addEventListener("click", ()=>{
+            const lat = item.position.lat, lng = item.position.lon;
+            document.getElementById("t-lat").value = lat.toFixed(6);
+            document.getElementById("t-lng").value = lng.toFixed(6);
+            if(!document.getElementById("t-name").value) document.getElementById("t-name").value = item.name;
+            tMinimap.setView([lat,lng], 14);
+            placeTipMinimapMarker(lat,lng,true);
+            resultsEl.innerHTML = "";
+            document.getElementById("t-search").value = item.name;
+          });
+          resultsEl.appendChild(div);
+        });
+      })
+      .catch(()=>{ if(mySeq === tSuggestSeq) resultsEl.innerHTML = `<div style="color:var(--cream-dim)">Vyhledávání selhalo, zkus zadat souřadnice ručně nebo klepnout na mapu.</div>`; });
+  }
+  document.getElementById("btn-import-tgmaps").addEventListener("click", ()=>{
+    const url = document.getElementById("t-gmaps").value.trim();
+    if(!url){ alert("Nejdřív vlož odkaz na Google Maps do pole výše."); return; }
+    const isShortLink = /goo\.gl\/maps|maps\.app\.goo\.gl/.test(url);
+    const res = parseGoogleMapsUrl(url);
+    if(!res || (res.lat==null && !res.name)){
+      if(isShortLink){
+        if(confirm("Tohle je zkrácený odkaz (maps.app.goo.gl) — appka z něj neumí přímo vyčíst polohu.\n\nOtevřu ho teď v nové kartě. Až se v prohlížeči rozbalí na plnou adresu, zkopíruj ji z adresního řádku a vlož zpátky sem místo zkráceného odkazu, pak znovu klikni na \"Načíst polohu z odkazu\".\n\nOtevřít odkaz?")){
+          window.open(url, "_blank", "noopener");
+        }
+      } else {
+        alert("Z tohohle odkazu se nepodařilo vyčíst polohu. Zkus zkontrolovat, jestli obsahuje souřadnice (např. @49.123,15.456), nebo zadej polohu ručně / klepnutím na mapu.");
+      }
+      return;
+    }
+    if(res.lat!=null){
+      document.getElementById("t-lat").value = res.lat.toFixed(6);
+      document.getElementById("t-lng").value = res.lng.toFixed(6);
+      if(tMinimap){ tMinimap.setView([res.lat,res.lng], 14); placeTipMinimapMarker(res.lat,res.lng,true); }
+    }
+    if(res.name && !document.getElementById("t-name").value){
+      document.getElementById("t-name").value = res.name;
+    }
+  });
+
+  document.getElementById("btn-tip-save").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
+    if(!tipsCollection){ alert("Appka ještě není připojená k databázi."); return; }
+    const name = document.getElementById("t-name").value.trim();
+    if(!name){ alert("Zadej název místa."); return; }
+    const lat = parseFloat(document.getElementById("t-lat").value);
+    const lng = parseFloat(document.getElementById("t-lng").value);
+    const country = document.getElementById("t-country").value;
+    const gmaps = document.getElementById("t-gmaps").value.trim();
+    const mapyurl = document.getElementById("t-mapyurl").value.trim();
+    const instagram = document.getElementById("t-instagram").value.trim();
+    const tiktok = document.getElementById("t-tiktok").value.trim();
+    const note = document.getElementById("t-note").value.trim();
+    const id = document.getElementById("tip-edit-id").value;
+    const btn = document.getElementById("btn-tip-save");
+    btn.disabled = true; btn.textContent = "Ukládám…";
+    const baseData = {
+      name, note, country: country || null,
+      lat: isNaN(lat)?null:lat, lng: isNaN(lng)?null:lng,
+      googleMapsUrl: gmaps || null, mapyUrl: mapyurl || null,
+      instagramUrl: instagram || null, tiktokUrl: tiktok || null,
+      visited: visitedStateTip
+    };
+    try{
+      if(id){
+        await window.fb.updateDoc(window.fb.doc(window.fb.db,"trip_tips",id), baseData);
+      } else {
+        await window.fb.addDoc(tipsCollection, {...baseData, order: Date.now(), createdAt: Date.now()});
+      }
+      closeSheets();
+    }catch(err){
+      console.error(err);
+      alert("Uložení se nepovedlo.");
+    }finally{
+      btn.disabled = false; btn.textContent = "Uložit tip";
+    }
+  });
+  document.getElementById("btn-tip-delete").addEventListener("click", async ()=>{
+    if(!requireEditor()) return;
+    const id = document.getElementById("tip-edit-id").value;
+    if(!id) return;
+    if(!confirm("Opravdu smazat tenhle tip?")) return;
+    try{
+      await window.fb.deleteDoc(window.fb.doc(window.fb.db,"trip_tips",id));
+      closeSheets();
+    }catch(err){ console.error(err); alert("Smazání se nepovedlo."); }
+  });
+
+
   /* ---------------- Camp form sheet ---------------- */
   const backdrop = document.getElementById("backdrop");
   const sheetForm = document.getElementById("sheet-form");
@@ -982,7 +1380,7 @@
   const sheetDiaryView = document.getElementById("sheet-diary-view");
   const sheetZolikNew = document.getElementById("sheet-zolik-new");
   const sheetLogin = document.getElementById("sheet-login");
-  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew, sheetLogin, document.getElementById("sheet-checklist-item")];
+  const allSheets = [sheetForm, sheetDiary, sheetDiaryView, sheetZolikNew, sheetLogin, document.getElementById("sheet-checklist-item"), document.getElementById("sheet-tip-form")];
 
   function openSheet(sheet){
     backdrop.classList.add("active");
@@ -1971,7 +2369,7 @@
 
   /* ---------------- Export / Import ---------------- */
   document.getElementById("btn-export").addEventListener("click", ()=>{
-    const payload = { camps, diary: diaryEntries, diary_folders: diaryFolders, zolik_games: zolikGames, checklist_items: checklistItems };
+    const payload = { camps, diary: diaryEntries, diary_folders: diaryFolders, zolik_games: zolikGames, checklist_items: checklistItems, trip_tips: tips };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1993,8 +2391,9 @@
         const foldersIn = Array.isArray(data) ? [] : (data.diary_folders||[]);
         const gamesIn = Array.isArray(data) ? [] : (data.zolik_games||[]);
         const checklistIn = Array.isArray(data) ? [] : (data.checklist_items||[]);
+        const tipsIn = Array.isArray(data) ? [] : (data.trip_tips||[]);
         if(!campsCollection){ alert("Appka ještě není připojená k databázi."); return; }
-        const total = campsIn.length + diaryIn.length + foldersIn.length + gamesIn.length + checklistIn.length;
+        const total = campsIn.length + diaryIn.length + foldersIn.length + gamesIn.length + checklistIn.length + tipsIn.length;
         if(!confirm(`Naimportovat ${total} položek do sdílené databáze? Může to vytvořit duplicity.`)) return;
         for(const item of campsIn){
           await window.fb.addDoc(campsCollection, {
@@ -2032,6 +2431,16 @@
             createdAt: item.createdAt || Date.now()
           });
         }
+        for(const item of tipsIn){
+          await window.fb.addDoc(tipsCollection, {
+            name: item.name || "Bez názvu", note: item.note || "",
+            lat: item.lat ?? null, lng: item.lng ?? null, country: item.country || null,
+            googleMapsUrl: item.googleMapsUrl || null, mapyUrl: item.mapyUrl || null,
+            instagramUrl: item.instagramUrl || null, tiktokUrl: item.tiktokUrl || null,
+            visited: !!item.visited,
+            order: item.order || Date.now(), createdAt: item.createdAt || Date.now()
+          });
+        }
         alert("Import hotov.");
       }catch(err){
         console.error(err);
@@ -2049,6 +2458,7 @@
     diaryFoldersCollection = window.fb.collection(window.fb.db, "diary_folders");
     zolikCollection = window.fb.collection(window.fb.db, "zolik_games");
     checklistCollection = window.fb.collection(window.fb.db, "checklist_items");
+    tipsCollection = window.fb.collection(window.fb.db, "trip_tips");
 
     window.fb.onSnapshot(window.fb.query(campsCollection, window.fb.orderBy("order","asc")), (snap)=>{
       camps = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2083,6 +2493,13 @@
       checklistItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
       if(currentView==="checklist") renderChecklist();
     }, (err)=> console.error("checklist sync error:", err));
+
+    window.fb.onSnapshot(window.fb.query(tipsCollection, window.fb.orderBy("order","asc")), (snap)=>{
+      tips = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      populateTipsCountryFilter();
+      renderMapMarkers();
+      if(currentView==="tipy") renderTipsList();
+    }, (err)=> console.error("tips sync error:", err));
   }
   let syncStarted = false;
   window.addEventListener("fb-ready", (e)=>{
@@ -2099,6 +2516,7 @@
   checkSetupBanner();
   populateCountrySelect();
   populateKempyCountryFilter();
+  populateTipsCountryFilter();
   initMainMap();
   switchView("mapa");
 })();
